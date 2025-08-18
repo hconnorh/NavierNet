@@ -1,8 +1,16 @@
-# PyFR 2D Cylinder → Python MP4 (Mac OS)
+# Navier-Stokes 2D ML Surrogate Model
 
-A short guide to run the 2D PyFR cylinder case on MacOS and produce a Python-generated MP4 (PyVista + ImageIO). This assumes you already have the project repo.
+## Training Data
 
-## 1 — Homebrew (macOS) — install once
+Training data will be captured from PyFR, an open-source CFD package optimsied for GPUs. For our trainging data we will start with modelling incompressible Navier Stokes simulation around a 2D pipe. This is a well known, classic engineering problem.
+
+The data will be on an unstructtured mesh. Data such as velocity, pressure etc, will be captured from the nodes forming raw data for trainging our ML surrogate model.
+
+The objective of the surrogate model will be to use this data to predict the next time step in the model.
+
+## Full Setup
+
+### PyFR Enviroment
 
 ```bash
 # optional: gmsh (mesh authoring), useful but not required
@@ -15,20 +23,22 @@ brew install libxsmm
 brew install ffmpeg
 ```
 
-> Notes:
-> - `libxsmm` is optional — only needed if you plan to run the OpenMP backend with LIBXSMM.
-> - On Apple Silicon you will most often use the **Metal** backend (GPU) or the `openmp` backend (CPU). Metal requires `precision = single` in the PyFR config.
+Notes:
+
+- On Apple Silicon you will most often use the **Metal** backend (GPU) or the `openmp` backend (CPU). Metal requires `precision = single` in the PyFR config.
 
 
-## 2 — Python virtualenv & packages
+### Virtual Enviroment (with UV)
+
+Assumes you already have UV isntalled. If not checkout UV here!
 
 ```bash
-python3 -m venv venv
+uv python3 -m venv venv
 source venv/bin/activate
 
 # install PyFR + visualization pipeline
-pip install pyfr pyvista imageio[ffmpeg] numpy h5py meshio
-
+uv pip install pyfr pyvista "imageio[ffmpeg]" numpy h5py meshio pyobjc-core pyobjc-framework-Metal
+pip install 
 ```
 
 Packages used in the pipeline:
@@ -38,33 +48,22 @@ Packages used in the pipeline:
 - `imageio[ffmpeg]` — saves `.mp4` from frames
 - `numpy`, `h5py`, `meshio` — common data handling utilities
 
+### Run the simulation (example for Apple M2)
 
-## 3 — Run the simulation (example for Apple M2)
+Edit your `inc-cykinder.ini` config so the backend precision suits Metal:
 
-Edit your `.pyfr` config so the backend precision suits Metal:
-
-```
+```ini
 [backend]
 precision = single
-
 ```
 
 Run PyFR (Metal GPU backend — recommended for M1/M2):
 
 ```bash
 pyfr run -b metal mesh/cylinder.msh inc-cylinder.pyfr
-
 ```
 
-Or run CPU OpenMP if you built `libxsmm.dylib` and want CPU-only:
-
-```bash
-export DYLD_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_LIBRARY_PATH   # if you built libxsmm.dylib here
-pyfr run -b openmp mesh/cylinder.msh inc-cylinder.pyfr
-
-```
-
-Outputs: a series of `inc-cylinder-*.pyfrs` solution files.
+Outputs: a series of `inc-cylinder-*.pyfrs` solution files
 
 ## 4 — Convert solutions to VTK (one-liner concept)
 
