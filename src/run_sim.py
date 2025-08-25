@@ -1,6 +1,7 @@
 import os
 import subprocess
 import configparser
+import pandas as pd
 
 from tqdm import tqdm
 
@@ -92,9 +93,18 @@ class pyfrSimulation:
         os.system(f"cp {self.pyfrm_file} {self.sim_config_dir}")
 
         # Copy and Modify .ini file for all permuations
+        case_params = []
         for perm, (nu, Uin, tend, dt_out) in enumerate(perms):
             ini_path = self._modify_ini_file(nu, Uin, tend, dt_out, perm)
             print(f"Wrote ini: {ini_path}")
+
+            # Convert the dictionary to a DataFrame and save as CSV
+            case_params.append({"case": perm, "nu" : nu, "Uin" : Uin, 
+                                "tend": tend,"dt_out":dt_out})
+       
+        df = pd.DataFrame(case_params)
+        df.to_csv(f"{self.training_dir}/case-inputs.csv", index=False)
+
 
     def run(self, pyfrm_file, ini_file, backend=None, results_dir=None, show_progress=True):
         """
@@ -166,12 +176,20 @@ class pyfrSimulation:
 
 if __name__ == "__main__":
     sim_name = "2d-cylinder-1s"
-    perms = [[
+    perms = [
+    [
         0.005,  # [nu, m/s^2] Kintematic velocity 
         1,      # [Uin, m/s]  Inlet velocity 
-        200,    # [tend, s]   Simulation time
+        10,    # [tend, s]   Simulation time
         5       # [dt-out, s] State save delta
-    ]]
+    ],
+    [
+        0.005,  # [nu, m/s^2] Kintematic velocity 
+        2,      # [Uin, m/s]  Inlet velocity 
+        10,     # [tend, s]   Simulation time
+        5       # [dt-out, s] State save delta
+    ],
 
+    ]
     m = pyfrSimulation(sim_name)
     m.run_bulk(perms, backend="metal", show_progress=True)
