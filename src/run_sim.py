@@ -1,7 +1,7 @@
 import os
-import sys
 import subprocess
 import configparser
+
 from tqdm import tqdm
 
 
@@ -19,7 +19,7 @@ class pyfrSimulation:
         self.assets_dir = "assets"
         self.base_dir = "sims"
 
-    def generate_pyfrm_mesh(self):
+    def _generate_pyfrm_mesh(self):
         """
         Converts the mesh file (.msh) for the simulation into a PyFR mesh file (.pyfrm)
         using the PyFR import utility. This is required before running the simulation.
@@ -28,7 +28,7 @@ class pyfrSimulation:
             "pyfr", "import", "-t", "gmsh", self.mesh_file, self.pyfrm_file
         ], check=True)
     
-    def modify_ini_file(self, nu, Uin, tend, dt_out, perm_num):
+    def _modify_ini_file(self, nu, Uin, tend, dt_out, perm_num):
         """
         Generate a customised .ini file in config_dir for a given permutation.
         Uses the base .ini file in assets/config as a template.
@@ -66,7 +66,7 @@ class pyfrSimulation:
 
         return out_path
 
-    def new_sim_project(self, perms):
+    def _new_sim_project(self, perms):
         """
         Creates a new simulation project directory structure and prepares 
         configuration files for all specified parameter permutations.
@@ -93,7 +93,7 @@ class pyfrSimulation:
 
         # Copy and Modify .ini file for all permuations
         for perm, (nu, Uin, tend, dt_out) in enumerate(perms):
-            ini_path = self.modify_ini_file(nu, Uin, tend, dt_out, perm)
+            ini_path = self._modify_ini_file(nu, Uin, tend, dt_out, perm)
             print(f"Wrote ini: {ini_path}")
 
     def run(self, pyfrm_file, ini_file, backend=None, results_dir=None, show_progress=True):
@@ -138,7 +138,7 @@ class pyfrSimulation:
         subprocess.run(cmd, check=True, cwd=results_dir)
 
 
-    def run_bulk(self, perms, backend=None, mesh_file="2d-cylinder.pyfrm"):
+    def run_bulk(self, perms, backend=None, mesh_file="2d-cylinder.pyfrm", show_progress=False):
         """
         Run simulations for all parameter permutations.
 
@@ -150,7 +150,7 @@ class pyfrSimulation:
         """
 
         # Setup new project
-        self.new_sim_project(perms)
+        self._new_sim_project(perms)
         pyfrm_file = os.path.join(self.sim_config_dir, mesh_file)
 
         # Run all cases into separate result subdirs
@@ -159,14 +159,14 @@ class pyfrSimulation:
             ini_file = os.path.join(self.sim_config_dir, f"case{c}.ini")
             results_dir = os.path.join(self.sim_results_dir, f"case{c}")
             try:
-                self.run(pyfrm_file, ini_file, backend, results_dir, show_progress=False)
+                self.run(pyfrm_file, ini_file, backend, results_dir, show_progress)
             except Exception as e:
                 print(f"Unexpected error running simulation {c}: {e}")
                 continue
 
 if __name__ == "__main__":
-    sim_name = "2d-cylinder-v1"
-    perms = [[0.0025, 1, 10, 5], [0.005, 0.5, 10, 5]]
+    sim_name = "2d-cylinder-1s"
+    perms = [[0.005, 1, 200, 5]]
 
-    sim = pyfrSimulation(sim_name)
-    sim.run_bulk(perms, backend="metal")
+    m = pyfrSimulation(sim_name)
+    m.run_bulk(perms, backend="metal", show_progress=True)
