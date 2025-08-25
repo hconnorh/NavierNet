@@ -7,8 +7,8 @@ import subprocess
 from typing import List, Tuple
 
 """
-This file provides utility functions for handling simulation data files. It 
-includes:
+This file provides utility functions for handling simulation data files. 
+It includes:
 	- Finding mesh files (.pyfrm) in a simulation's config directory.
 	- Writing .pvd files to describe time series of VTU files.
 	- Converting simulation result files (.pyfrs) to .VTU format and generating 

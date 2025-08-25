@@ -19,12 +19,21 @@ It includes:
 """
 
 def _as_point_data(mesh: "pv.DataSet") -> "pv.DataSet":
-	# If there is no point data but there is cell data, convert.
+	"""If there is no point data but there is cell data, convert"""
 	if len(mesh.point_data) == 0 and len(mesh.cell_data) > 0:
 		mesh = mesh.cell_data_to_point_data()
 	return mesh
 
 def _get_pressure(mesh: "pv.DataSet") -> np.ndarray:
+	"""
+	Extract the pressure array from the point data of a PyVista mesh.
+
+	Args:
+		mesh (pv.DataSet): The mesh containing point data with a 'Pressure' array.
+
+	Returns:
+		np.ndarray: The pressure values as a 1D array.
+	"""
 	PRESSURE_ARRAY_KEY = "Pressure"
 
 	# Check key name
@@ -36,6 +45,15 @@ def _get_pressure(mesh: "pv.DataSet") -> np.ndarray:
 	return np.asarray(mesh.point_data[PRESSURE_ARRAY_KEY]).ravel()
 
 def _get_velocity_components(mesh: "pv.DataSet") -> Tuple[np.ndarray, np.ndarray]:
+	"""
+	Extract the x and y components of the velocity vector from a PyVista mesh.
+
+	Args:
+		mesh (pv.DataSet): The mesh containing point data with a 'Velocity' vector.
+
+	Returns:
+		Tuple[np.ndarray, np.ndarray]: Arrays of the x and y velocity components.
+	"""
 	VELOCITY_VECTOR_KEY = "Velocity"
 
 	# Check key name
@@ -53,7 +71,7 @@ def _get_velocity_components(mesh: "pv.DataSet") -> Tuple[np.ndarray, np.ndarray
 
 
 def _build_reference_index(points_xy: np.ndarray) -> Dict[Tuple[float, float], int]:
-	# Use rounding to stabilize float keys
+	"""Use rounding to stabilise float keys"""
 	keys = [(
 		float(round(x, 12)),
 		float(round(y, 12))
@@ -84,13 +102,17 @@ def _compute_remap_index(reference_xy: np.ndarray, current_xy: np.ndarray) -> np
 
 def extract_csv(sim_name: str, case_name: str, return_df: bool=True) -> None:
 	"""
-	Extract csv for a single case.
+	Extract nodewise results for a single simulation case to CSV.
+
+	Args:
+	    sim_name (str): Name of the simulation directory under 'sims/'.
+	    case_name (str): Name of the case subdirectory under 'pyfr_results'.
+	    return_df (bool): If True, also return the results as a DataFrame.
 	"""
 	
 	# Pathing
 	vtu_dir = f"sims/{sim_name}/pyfr_results"
 	out_dir = f"sims/{sim_name}/training_data"
-	os.makedirs(f"{out_dir}/{case_name}", exist_ok=True)
 	results = f"{out_dir}/{case_name}-results.csv"
 	key_inputs = f"{out_dir}/{case_name}-inputs.csv"
 
@@ -167,11 +189,41 @@ def extract_csv(sim_name: str, case_name: str, return_df: bool=True) -> None:
 		cols = ["step", "n_x", "n_y", "p", "u", "v", "vn"]
 		return pd.DataFrame(out_arr, columns=cols)
 
+def extract_all_cases(sim_name: str) -> None:
+	"""
+	Extracts and combines training data CSVs for all simulation cases in a 
+	given simulation directory.
+
+	For each case in the simulation, this function calls `extract_csv` to 
+	process the results and accumulates the total memory usage of the 
+	resulting DataFrames.
+
+	Args:
+		sim_name (str): Name of the simulation directory under 'sims/'.
+	"""
+	# Project Paths
+	sim_dir = f"sims/{sim_name}"
+	results_root = f"{sim_dir}/pyfr_results"
+
+	# Convert Cases
+	cases = ([d for d in sorted(os.listdir(results_root)) if os.path.isdir(os.path.join(results_root, d))])
+
+	mem_size = 0
+	for case in cases:
+		df = extract_csv(sim_name, case, return_df=True)
+		mem_size += df.memory_usage(deep=True).sum() / (1024 ** 2)
+
+	print(f"Results: {mem_size:.2f} MB")
+
 
 if __name__ == "__main__":
-	
 	sim_name = "2d-cylinder-v1"
+
+	# Single Case
 	case_name = "case0"
 	df = extract_csv(sim_name=sim_name, case_name=case_name) 
 	print(f"Results: {df.memory_usage(deep=True).sum() / (1024 ** 2):.2f} MB")
-	print(df)
+	print(df.head(5))
+
+	# All cases
+	extract_all_cases(sim_name=sim_name) 
