@@ -166,7 +166,12 @@ class pyfrSimulation:
 
 if __name__ == "__main__":
     sim_name = "2d-cylinder-1s"
-    perms = [[0.005, 1, 200, 5]]
+    perms = [[
+        0.005,  # [nu, m/s^2] Kintematic velocity 
+        1,      # [Uin, m/s]  Inlet velocity 
+        200,    # [tend, s]   Simulation time
+        5       # [dt-out, s] State save delta
+    ]]
 
     m = pyfrSimulation(sim_name)
     m.run_bulk(perms, backend="metal", show_progress=True)
