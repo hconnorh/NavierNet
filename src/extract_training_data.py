@@ -2,6 +2,7 @@ import os
 import glob
 import csv
 import numpy as np
+import pandas as pd
 import pyvista as pv
 
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -81,7 +82,7 @@ def _compute_remap_index(reference_xy: np.ndarray, current_xy: np.ndarray) -> np
 	return np.asarray(idx, dtype=np.int64)
 
 
-def extract_csv(sim_name: str, case_name:str) -> None:
+def extract_csv(sim_name: str, case_name: str, return_df: bool=True) -> None:
 	"""
 	Extract csv for a single case.
 	"""
@@ -90,7 +91,8 @@ def extract_csv(sim_name: str, case_name:str) -> None:
 	vtu_dir = f"sims/{sim_name}/pyfr_results"
 	out_dir = f"sims/{sim_name}/training_data"
 	os.makedirs(f"{out_dir}/{case_name}", exist_ok=True)
-	combined_file = f"{out_dir}/{case_name}/all.csv"
+	results = f"{out_dir}/{case_name}-results.csv"
+	key_inputs = f"{out_dir}/{case_name}-inputs.csv"
 
 	# Find vtu files
 	vtu_dir = f"{vtu_dir}/{case_name}"
@@ -106,13 +108,12 @@ def extract_csv(sim_name: str, case_name:str) -> None:
 		raise SystemExit("Mesh points must have 2 coordinates")
 	ref_xy = points[:, :2]
 
-	# Prepare combined CSV writer with header
-	all_f = open(combined_file, "w", newline="")
-	all_writer = csv.writer(all_f)
-	all_writer.writerow(["n_x", "n_y", "p", "u", "v", "vn"])
+	# Prepare output buffer: rows = num_steps * num_nodes, cols = 7 (step, n_x, n_y, p, u, v, vn)
+	num_steps = len(vtus)
+	num_nodes = ref_xy.shape[0]
+	out_arr = np.empty((num_steps * num_nodes, 7), dtype=float)
 
-	# Process each timestep and append rows (one per node)
-
+	# Process each timestep and fill output buffer
 	for step, vtu_path in enumerate(vtus):
 		mesh = pv.read(vtu_path)
 		mesh = _as_point_data(mesh)
@@ -134,26 +135,43 @@ def extract_csv(sim_name: str, case_name:str) -> None:
 			v_arr = v_arr[idx]
 			vnorm_arr = vnorm_arr[idx]
 
-		# Write one row per node for this timestep
-		for i in range(ref_xy.shape[0]):
-			all_writer.writerow([
-				f"{ref_xy[i, 0]:.16g}",
-				f"{ref_xy[i, 1]:.16g}",
-				f"{p_arr[i]:.16g}",
-				f"{u_arr[i]:.16g}",
-				f"{v_arr[i]:.16g}",
-				f"{vnorm_arr[i]:.16g}",
-			])
+		# Build block for this timestep: [step, n_x, n_y, p, u, v, vn]
+		block = np.column_stack([
+			np.full(num_nodes, step, dtype=float),
+			ref_xy[:, 0],
+			ref_xy[:, 1],
+			p_arr,
+			u_arr,
+			v_arr,
+			vnorm_arr,
+		])
+		row_start = step * num_nodes
+		row_end = row_start + num_nodes
+		out_arr[row_start:row_end, :] = block
 
 		print(f"Processed {step + 1}/{len(vtus)}: {os.path.basename(vtu_path)}")
 
-	# Close file
-	all_f.close()
-	print(f"Wrote combined CSV: {combined_file}")
+	# Write once at the end with header
+	np.savetxt(
+		results,
+		out_arr,
+		delimiter=",",
+		fmt="%.16g",
+		header=",".join(["step", "n_x", "n_y", "p", "u", "v", "vn"]),
+		comments="",
+	)
+
+	print(f"Wrote combined CSV: {results}")
+
+	if return_df:
+		cols = ["step", "n_x", "n_y", "p", "u", "v", "vn"]
+		return pd.DataFrame(out_arr, columns=cols)
 
 
 if __name__ == "__main__":
 	
 	sim_name = "2d-cylinder-v1"
 	case_name = "case0"
-	extract_csv(sim_name=sim_name, case_name=case_name) 
+	df = extract_csv(sim_name=sim_name, case_name=case_name) 
+	print(f"Results: {df.memory_usage(deep=True).sum() / (1024 ** 2):.2f} MB")
+	print(df)
