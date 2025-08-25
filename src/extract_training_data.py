@@ -90,11 +90,7 @@ def extract_csv(sim_name: str, case_name:str) -> None:
 	vtu_dir = f"sims/{sim_name}/pyfr_results"
 	out_dir = f"sims/{sim_name}/training_data"
 	os.makedirs(f"{out_dir}/{case_name}", exist_ok=True)
-	nodes_file = f"{out_dir}/{case_name}/nodes.csv"
-	pressure_file = f"{out_dir}/{case_name}/pressure.csv"
-	u_file = f"{out_dir}/{case_name}/u.csv"
-	v_file = f"{out_dir}/{case_name}/v.csv"
-	vnorm_file = f"{out_dir}/{case_name}/_vnorm.csv"
+	combined_file = f"{out_dir}/{case_name}/all.csv"
 
 	# Find vtu files
 	vtu_dir = f"{vtu_dir}/{case_name}"
@@ -110,25 +106,12 @@ def extract_csv(sim_name: str, case_name:str) -> None:
 		raise SystemExit("Mesh points must have 2 coordinates")
 	ref_xy = points[:, :2]
 
-	# Write nodes.csv (x,y)
-	with open(nodes_file, "w", newline="") as f:
-		writer = csv.writer(f)
-		for i in range(ref_xy.shape[0]):
-			writer.writerow([f"{ref_xy[i, 0]:.16g}", f"{ref_xy[i, 1]:.16g}"])
-	print(f"Wrote node coordinates: {nodes_file}")
+	# Prepare combined CSV writer with header
+	all_f = open(combined_file, "w", newline="")
+	all_writer = csv.writer(all_f)
+	all_writer.writerow(["n_x", "n_y", "p", "u", "v", "vn"])
 
-	# Prepare pressure/velocity CSV writers
-	p_file = open(pressure_file, "w", newline="")
-	u_f = open(u_file, "w", newline="")
-	v_f = open(v_file, "w", newline="")
-	vn_f = open(vnorm_file, "w", newline="")
-	p_writer = csv.writer(p_file)
-	u_writer = csv.writer(u_f)
-	v_writer = csv.writer(v_f)
-	vn_writer = csv.writer(vn_f)
-
-	# Precompute reference mapping for subsequent files
-	ref_index_map = _build_reference_index(ref_xy)
+	# Process each timestep and append rows (one per node)
 
 	for step, vtu_path in enumerate(vtus):
 		mesh = pv.read(vtu_path)
@@ -151,22 +134,22 @@ def extract_csv(sim_name: str, case_name:str) -> None:
 			v_arr = v_arr[idx]
 			vnorm_arr = vnorm_arr[idx]
 
-		# Write one row per timestep
-		p_writer.writerow([f"{val:.16g}" for val in p_arr])
-		u_writer.writerow([f"{val:.16g}" for val in u_arr])
-		v_writer.writerow([f"{val:.16g}" for val in v_arr])
-		vn_writer.writerow([f"{val:.16g}" for val in vnorm_arr])
+		# Write one row per node for this timestep
+		for i in range(ref_xy.shape[0]):
+			all_writer.writerow([
+				f"{ref_xy[i, 0]:.16g}",
+				f"{ref_xy[i, 1]:.16g}",
+				f"{p_arr[i]:.16g}",
+				f"{u_arr[i]:.16g}",
+				f"{v_arr[i]:.16g}",
+				f"{vnorm_arr[i]:.16g}",
+			])
 
 		print(f"Processed {step + 1}/{len(vtus)}: {os.path.basename(vtu_path)}")
 
-	# Close Files
-	p_file.close()
-	u_f.close()
-	v_f.close()
-	vn_f.close()
-	print(f"Wrote pressure time-series: {pressure_file}")
-	print(f"Wrote velocity component time-series: {u_file}, {v_file}")
-	print(f"Wrote velocity magnitude time-series: {vnorm_file}")
+	# Close file
+	all_f.close()
+	print(f"Wrote combined CSV: {combined_file}")
 
 
 if __name__ == "__main__":
