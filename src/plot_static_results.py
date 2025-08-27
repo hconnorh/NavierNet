@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 
-
 def plot_column(sim_name: str, col: str, case_name: int| None = None, 
                              step: int | None = None) -> None:
 	"""
@@ -16,7 +15,8 @@ def plot_column(sim_name: str, col: str, case_name: int| None = None,
 	- step: specific step to filter; if None, uses the last available step.
 	- output_html: optional path to write HTML; if None, writes next to CSV.
 	"""
-	# Read the results CSV for the given simulation and case
+    #TODO: Add inputs as title!
+
 	df = pd.read_csv(f"sims/{sim_name}/training_data/{case_name}-results.csv")
 
 	if step is None:
@@ -52,15 +52,16 @@ def plot_column(sim_name: str, col: str, case_name: int| None = None,
 		margin=dict(l=40, r=40, t=60, b=40)
 	)
 	fig.update_yaxes(scaleanchor="x", scaleratio=1)
-	fig.show()
+
+	return fig
 
 
 if __name__ == "__main__":
 
-    sim_name = "2d-cylinder-v1"
-
+    sim_name = "test-sim"
     case = "case0"
-    step = 0
-    col = "p"
+    step = 2
+    col = "vn"
 
-    plot_column(sim_name, col='p', case_name=case, step=step)
+    fig = plot_column(sim_name, col='p', case_name=case, step=step)
+    fig.show(renderer="browser")
