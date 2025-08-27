@@ -3,6 +3,7 @@ import sys
 import glob
 import shutil
 import subprocess
+import re
 
 from typing import List, Tuple
 
@@ -62,8 +63,8 @@ def convert_case(sim_dir: str, case: str) -> None:
     mesh_file = find_mesh_file(sim_dir)
     out_dir = case_dir
 
-    # Discover series files
-    pyfrs_files = sorted(glob.glob(os.path.join(case_dir, "*.pyfrs")))
+    # Discover series files (unsorted; we'll sort numerically by extracted time)
+    pyfrs_files = list(glob.glob(os.path.join(case_dir, "*.pyfrs")))
     if not pyfrs_files:
         print(f"No .pyfrs found in {case_dir}; skipping")
         return None
@@ -73,6 +74,25 @@ def convert_case(sim_dir: str, case: str) -> None:
     prefix = first_stem.rsplit("-", 1)[0] if "-" in first_stem else first_stem
     pvd_entries: List[Tuple[float, str]] = []
 
+    # Extract numeric timesteps from filenames using regex; handle values like 0.00, 2.00, 19.95
+    time_pattern = re.compile(r"-(?P<time>[0-9]+(?:\.[0-9]+)?)\.pyfrs$")
+    indexed: List[Tuple[float, str]] = []
+    for f in pyfrs_files:
+        name = os.path.basename(f)
+        m = time_pattern.search(name)
+        if not m:
+            # Skip files that don't match expected pattern
+            continue
+        t = float(m.group("time"))
+        indexed.append((t, f))
+
+    if not indexed:
+        print(f"No .pyfrs with parseable time suffix found in {case_dir}; skipping")
+        return None
+
+    # Sort by numeric time, then by filename for stability
+    indexed.sort(key=lambda x: (x[0], x[1]))
+
     # Decide PyFR invocation
     pyfr_exe = shutil.which("pyfr")
     if pyfr_exe:
@@ -80,9 +100,9 @@ def convert_case(sim_dir: str, case: str) -> None:
     else:
         cmd_base = [sys.executable, "-m", "pyfr"] # Fallback to module
 
-    # Convert file
-    for i, sol_abspath in enumerate(pyfrs_files):
-        sol_name = os.path.basename(sol_abspath) 
+    # Convert files in numeric time order and assign sequential indices
+    for i, (t, sol_abspath) in enumerate(indexed):
+        sol_name = os.path.basename(sol_abspath)
         out_file_rel = f"{prefix}_{i:04d}.vtu"
         
         # Convert file
@@ -91,9 +111,8 @@ def convert_case(sim_dir: str, case: str) -> None:
         subprocess.run(cmd_base + ["export", mesh_rel_to_case, sol_name,
                                    out_file_rel], check=True, cwd=case_dir)
 
-		# Append pvd file
-        timestep = float(sol_name.split("-")[-1].split(".")[0])
-        pvd_entries.append((timestep, os.path.basename(out_file_rel)))
+		# Append pvd file using parsed numeric time
+        pvd_entries.append((t, os.path.basename(out_file_rel)))
 	
     write_pvd(pvd_entries, out_dir, prefix)
 
@@ -117,6 +136,6 @@ def process_sim_results(sim_name: str) -> None:
 if __name__ == "__main__":
 
     # Process pyfrs results
-    sim_name = "2d-cylinder-v1"
+    sim_name = "sim-3600f"
     process_sim_results(sim_name)
 	
