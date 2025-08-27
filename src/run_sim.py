@@ -29,7 +29,7 @@ class pyfrSimulation:
             "pyfr", "import", "-t", "gmsh", self.mesh_file, self.pyfrm_file
         ], check=True)
     
-    def _modify_ini_file(self, nu, Uin, tend, dt_out, perm_num):
+    def _modify_ini_file(self, nu, Uin, dt, tend, dt_out, perm_num):
         """
         Generate a customised .ini file in config_dir for a given permutation.
         Uses the base .ini file in assets/config as a template.
@@ -38,6 +38,7 @@ class pyfrSimulation:
         ----------
         nu (float): Kinematic viscosity [m^2/s]
         Uin (float): Inlet velocity [m/s]
+        dt (float): Time step
         tend (float): End time [s]
         dt_out (float): Output interval [s]
         perm_num (int): Permutation number used to name the output .ini file.
@@ -57,6 +58,7 @@ class pyfrSimulation:
             cfg.add_section("constants")
         cfg.set("constants", "nu", str(nu))
         cfg.set("constants", "Uin", str(Uin))
+        cfg.set("constants", "dt", str(dt))
         cfg.set("solver-time-integrator", "tend", str(tend))
         cfg.set("soln-plugin-writer", "dt-out", str(dt_out))
 
@@ -94,8 +96,8 @@ class pyfrSimulation:
 
         # Copy and Modify .ini file for all permuations
         case_params = []
-        for perm, (nu, Uin, tend, dt_out) in enumerate(perms):
-            ini_path = self._modify_ini_file(nu, Uin, tend, dt_out, perm)
+        for perm, (nu, Uin, dt, tend, dt_out) in enumerate(perms):
+            ini_path = self._modify_ini_file(nu, Uin, dt, tend, dt_out, perm)
             print(f"Wrote ini: {ini_path}")
 
             # Convert the dictionary to a DataFrame and save as CSV
@@ -180,14 +182,9 @@ if __name__ == "__main__":
     [
         0.005,  # [nu, m/s^2] Kintematic velocity 
         1,      # [Uin, m/s]  Inlet velocity 
-        10,    # [tend, s]   Simulation time
-        5       # [dt-out, s] State save delta
-    ],
-    [
-        0.005,  # [nu, m/s^2] Kintematic velocity 
-        2,      # [Uin, m/s]  Inlet velocity 
-        10,     # [tend, s]   Simulation time
-        5       # [dt-out, s] State save delta
+        0.05,   # [dt, s]     Time step
+        10,     # [tend, s]   Simulation total time
+        5       # [dt-out, s] Save state
     ],
 
     ]
