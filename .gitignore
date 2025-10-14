@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 
 # Virtual environments
-venv/
+_venv/
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
@@ -32,6 +32,8 @@ results/
 
 
 # Misc
-\[ss\]
+_ss/
 _temp/
+_resources/
 # End Generation Here
+ROADMAP.md
