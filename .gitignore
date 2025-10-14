@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+_venv/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories and files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Python egg and build artifacts
+*.egg-info/
+dist/
+build/
+
+# PyFR simulation outputs
+sims/
+results/
+*.pyfrm
+*.msh
+
+
+# Misc
+_ss/
+_temp/
+_resources/
+# End Generation Here
+ROADMAP.md
