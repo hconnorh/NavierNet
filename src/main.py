@@ -4,7 +4,7 @@ from run_sim import pyfrSimulation
 from animation import gen_mp4
 
 """
-Module: run_all.py
+Module: main.py
 Package: NS2D-Surrogate
 Author: @hconnorh
 Description: 
