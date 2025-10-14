@@ -8,12 +8,20 @@ import re
 from typing import List, Tuple
 
 """
-This file provides utility functions for handling simulation data files. 
-It includes:
+Module: process_results.py
+Package: NS2D-Surrogate
+Author: @hconnorh
+Description: 
+
+This file provides utility functions for handling simulation data files. It 
+includes:
 	- Finding mesh files (.pyfrm) in a simulation's config directory.
 	- Writing .pvd files to describe time series of VTU files.
 	- Converting simulation result files (.pyfrs) to .VTU format and generating 
       extracting nodal results.
+
+Date: 09-May-2023
+Modified: 17-Sep-2025
 """
 
 def find_mesh_file(sim_dir: str) -> str:

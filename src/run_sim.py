@@ -5,6 +5,20 @@ import pandas as pd
 
 from tqdm import tqdm
 
+"""
+Module: run_sim.py
+Package: NS2D-Surrogate
+Author: @hconnorh
+Description: 
+
+This module provides the pyfrSimulation class, a utility for running PyFR 
+simulations, preparing and customising input files and managing simulation 
+assets and configuration. It is used in automated workflows for parameter 
+studies or ML training data generation.
+
+Date: 09-May-2023
+Modified: 17-Sep-2025
+"""
 
 class pyfrSimulation:
     """
@@ -132,7 +146,6 @@ class pyfrSimulation:
         results_dir = results_dir or "results"
         os.makedirs(results_dir, exist_ok=True)
         
-        # Requires Absolute Paths #TODO: Not sure why.
         pyfrm_abs = os.path.abspath(pyfrm_file)
         ini_abs = os.path.abspath(ini_file)
         if not os.path.isfile(pyfrm_abs):

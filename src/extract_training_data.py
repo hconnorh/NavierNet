@@ -1,21 +1,32 @@
 import os
 import glob
-import csv
 import numpy as np
 import pandas as pd
 import pyvista as pv
 
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Tuple
+
 
 """
-Utility functions for extracting nodal pressure and velocity timeseries 
-generated from pyFR simulation results (.vtu files).
+Module: extract_training_data.py
+Package: NS2D-Surrogate
+Author: @hconnorh
+Description:
 
-It includes:
-- Imports for handling files, arrays, and PyVista meshes.
-- Functions to ensure mesh data is in point-data format, extract pressure and 
-  velocity components, and build index mappings between point coordinates.
-- Designed to robustly handle remapping between different mesh layouts.
+This module provides utilities to extract nodal pressure and velocity 
+time-series from PyFR simulation result files (.vtu). These utilities 
+support building ML-ready CSV datasets from time-dependent simulation outputs.
+
+Features:
+- Facilitates robust extraction of simulation fields suitable for machine 
+  learning workflows.
+- Loads VTU files and converts mesh cell data to point data if necessary.
+- Extracts nodal pressure and velocity components for each timestep.
+- Maps node coordinates to index and manages consistency across different mesh 
+  layouts.
+
+Date: 09-May-2023
+Modified: 17-Sep-2025
 """
 
 def _as_point_data(mesh: "pv.DataSet") -> "pv.DataSet":

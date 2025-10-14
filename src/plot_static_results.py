@@ -1,9 +1,31 @@
 #!/usr/bin/env python3
 
-import os
 import numpy as np
 import pandas as pd
 import plotly.express as px
+
+"""
+Module: plot_static_results.py
+Package: NS2D-Surrogate
+Author: @hconnorh
+Description:
+
+This script provides utility plotting functionality for static visualisation of
+simulated nodal fields (e.g., pressure, velocity) from PyFR-generated training 
+data CSVs.
+
+It is used to generate static x/y scatter plots colorized by nodal property, 
+for a specified timestep, case, and simulation. Intended for analysis and 
+verification of simulation results.
+
+Key Features:
+    - Loads case-specific extracted CSV files from a simulation folder
+    - Visualises fields (pressure, velocity components, etc.) over the mesh
+    - Presents plots using Plotly web/webgl for large datasets
+
+Date: 09-May-2023
+Modified: 17-Sep-2025
+"""
 
 def plot_column(sim_name: str, col: str, case_name: int| None = None, 
                              step: int | None = None) -> None:
