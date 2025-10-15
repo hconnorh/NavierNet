@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-
+import os
 import numpy as np
-import pandas as pd
+import polars as pl
 import plotly.express as px
 
 """
@@ -27,8 +27,8 @@ Date: 09-May-2023
 Modified: 17-Sep-2025
 """
 
-def plot_column(sim_name: str, col: str, case_name: int| None = None, 
-                             step: int | None = None) -> None:
+def plot_column(df: str, col: str, case_name: int| None = None, 
+                step: int | None = None, theme: str ="Turbo") -> None:
 	"""
     Scatter plot x/y colored by the requested column at a given step.
 
@@ -37,10 +37,8 @@ def plot_column(sim_name: str, col: str, case_name: int| None = None,
 	- step: specific step to filter; if None, uses the last available step.
 	- output_html: optional path to write HTML; if None, writes next to CSV.
 	"""
-    #TODO: Add inputs as title!
 
-	df = pd.read_csv(f"sims/{sim_name}/training_data/{case_name}-results.csv")
-
+	# Check if the requested step exists; if step is None, pick max step
 	if step is None:
 		step = df['step'].max()
 	df = df[df['step'] == step]
@@ -61,7 +59,7 @@ def plot_column(sim_name: str, col: str, case_name: int| None = None,
 		x=x,
 		y=y,
 		color=color_vals,
-		color_continuous_scale="Viridis",
+		color_continuous_scale=theme,
 		render_mode="webgl",
 		labels={"color": col},
 		title=title
