@@ -1,7 +1,10 @@
 import os
 import subprocess
 import configparser
-import pandas as pd
+import polars as pl
+from pathlib import Path
+import shutil
+import sys
 
 from tqdm import tqdm
 
@@ -20,28 +23,70 @@ Date: 09-May-2023
 Modified: 17-Sep-2025
 """
 
-class pyfrSimulation:
+ROOT = Path(__file__).resolve().parent.parent
+
+class PyfrSimulation:
     """
     A wrapper for running bulk PyFR simulations.
     """
-    def __init__(self, sim_name):
+    def __init__(self, sim_name, mesh_file=None, pyfrm_file=None, ini_file=None):
         self.sim_name = sim_name
-        self.config_dir = os.path.abspath("assets/config") 
-        
-        self.mesh_file = os.path.join("assets/config", f"2d-cylinder.msh")
-        self.pyfrm_file = os.path.join("assets/config", f"2d-cylinder.pyfrm")
-        
-        self.assets_dir = "assets"
-        self.base_dir = "sims"
+
+        # Resolve paths relative to repo root 
+        assets_config_dir = ROOT / "assets" / "config"
+
+        # Default files if not provided
+        if mesh_file is None:
+            mesh_file = assets_config_dir / "2d-cylinder.msh"
+        if pyfrm_file is None:
+            pyfrm_file = assets_config_dir / "2d-cylinder.pyfrm"
+        if ini_file is None:
+            ini_file = assets_config_dir / "2d-cylinder.ini"
+
+        # Store absolute paths as strings for downstream use
+        self.mesh_file = str(Path(mesh_file).resolve())
+        self.pyfrm_file = str(Path(pyfrm_file).resolve())
+        self.ini_file = str(Path(ini_file).resolve())
+
+        self.assets_dir = str((ROOT / "assets").resolve())
+        self.base_dir = str((ROOT / "sims").resolve())
+        self.config_dir = str(assets_config_dir.resolve()) 
 
     def _generate_pyfrm_mesh(self):
         """
         Converts the mesh file (.msh) for the simulation into a PyFR mesh file (.pyfrm)
         using the PyFR import utility. This is required before running the simulation.
         """
-        subprocess.run([
-            "pyfr", "import", "-t", "gmsh", self.mesh_file, self.pyfrm_file
-        ], check=True)
+        cmd = self._pyfr_base_cmd(show_progress=False) + [
+            "import", "-t", "gmsh", self.mesh_file, self.pyfrm_file
+        ]
+        try:
+            subprocess.run(cmd, check=True)
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                "PyFR CLI not found. Ensure PyFR is installed and on PATH, or install into this env"
+            ) from e
+
+    def _pyfr_base_cmd(self, show_progress):
+        """Return the base PyFR command, preferring the CLI if available, otherwise python -m pyfr."""
+        pyfr_exe = shutil.which("pyfr")
+        cmd = [pyfr_exe] if pyfr_exe else [sys.executable, "-m", "pyfr"]
+        if show_progress:
+            cmd.append("-p")
+        return cmd
+    
+    @staticmethod
+    def _running_in_notebook():
+        """Best-effort detection of Jupyter/IPython notebook environment."""
+        try:
+            from IPython import get_ipython  # type: ignore
+            ip = get_ipython()
+            if ip and getattr(ip, 'kernel', None) is not None:
+                return True
+        except Exception:
+            return False
+        # Fallback checks
+        return 'ipykernel' in sys.modules or os.environ.get('JPY_PARENT_PID') is not None
     
     def _modify_ini_file(self, nu, Uin, dt, tend, dt_out, perm_num):
         """
@@ -61,19 +106,26 @@ class pyfrSimulation:
         -------
         out_path (str): Path to the newly generated .ini file.
         """
-
-        base_ini = os.path.join(self.assets_dir, "config/2d-cylinder.ini")
-
         cfg = configparser.RawConfigParser()
         cfg.optionxform = str  # preserve key case
-        cfg.read(base_ini)
+        ini_path = str(Path(self.ini_file).resolve())
+        read_ok = cfg.read(ini_path)
+
+        if not read_ok:
+            raise FileNotFoundError(f"Base .ini template not found: {ini_path}")
 
         if not cfg.has_section("constants"):
             cfg.add_section("constants")
         cfg.set("constants", "nu", str(nu))
         cfg.set("constants", "Uin", str(Uin))
-        cfg.set("constants", "dt", str(dt))
+
+        if not cfg.has_section("solver-time-integrator"):
+            cfg.add_section("solver-time-integrator")
+        cfg.set("solver-time-integrator", "dt", str(dt))
         cfg.set("solver-time-integrator", "tend", str(tend))
+
+        if not cfg.has_section("soln-plugin-writer"):
+            cfg.add_section("soln-plugin-writer")
         cfg.set("soln-plugin-writer", "dt-out", str(dt_out))
 
         out_name = f"case{perm_num}.ini"
@@ -105,21 +157,21 @@ class pyfrSimulation:
             os.makedirs(d, exist_ok=True)
     
         # Copy Config Files
-        os.system(f"cp {self.mesh_file} {self.sim_config_dir}")
-        os.system(f"cp {self.pyfrm_file} {self.sim_config_dir}")
+        shutil.copy(self.mesh_file, self.sim_config_dir)
+        shutil.copy(self.pyfrm_file, self.sim_config_dir)
 
         # Copy and Modify .ini file for all permuations
         case_params = []
         for perm, (nu, Uin, dt, tend, dt_out) in enumerate(perms):
             ini_path = self._modify_ini_file(nu, Uin, dt, tend, dt_out, perm)
-            print(f"Wrote ini: {ini_path}")
+            print(f"New ini file: {ini_path}")
 
             # Convert the dictionary to a DataFrame and save as CSV
             case_params.append({"case": perm, "nu" : nu, "Uin" : Uin, 
                                 "tend": tend,"dt_out":dt_out})
        
-        df = pd.DataFrame(case_params)
-        df.to_csv(f"{self.training_dir}/case-inputs.csv", index=False)
+        df = pl.DataFrame(case_params)
+        df.write_csv(f"{self.training_dir}/case-inputs.csv")
 
 
     def run(self, pyfrm_file, ini_file, backend=None, results_dir=None, show_progress=True):
@@ -154,10 +206,9 @@ class pyfrSimulation:
             raise FileNotFoundError(f".ini not found: {ini_abs}")
         
         # Run PyFR simulation as a subprocess
-        cmd = ["pyfr"]
-        if show_progress:
-            cmd.append("-p")
-        cmd += [
+        # PyFR's '-p' progress output is not notebook-friendly; disable in notebooks
+        effective_progress = bool(show_progress) and not self._running_in_notebook()
+        cmd = self._pyfr_base_cmd(show_progress=effective_progress) + [
             "run", "-b", backend, pyfrm_abs, ini_abs
         ]
         subprocess.run(cmd, check=True, cwd=results_dir)
@@ -201,5 +252,5 @@ if __name__ == "__main__":
     ],
 
     ]
-    m = pyfrSimulation(sim_name)
+    m = PyfrSimulation(sim_name)
     m.run_bulk(perms, backend="metal", show_progress=True)

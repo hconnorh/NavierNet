@@ -6,7 +6,7 @@ import pyvista as pv
 
 from typing import Dict, List, Tuple
 from tqdm import tqdm
-
+from pathlib import Path
 
 """
 Module: extract_training_data.py
@@ -29,6 +29,7 @@ Features:
 Date: 09-May-2023
 Modified: 17-Sep-2025
 """
+ROOT = Path(__file__).resolve().parent.parent
 
 def _as_point_data(mesh: "pv.DataSet") -> "pv.DataSet":
 	"""If there is no point data but there is cell data, convert"""
@@ -185,15 +186,15 @@ def extract_csv(sim_name: str, case_name: str, return_df: bool=True) -> None:
 	    return_df (bool): If True, also return the results as a DataFrame.
 	"""
 	
-	# Pathing
-	vtu_dir = f"sims/{sim_name}/pyfr_results"
-	out_dir = f"sims/{sim_name}/training_data"
-	results = f"{out_dir}/{case_name}-results.csv"
-	key_inputs = f"{out_dir}/{case_name}-inputs.csv"
+	# Pathing (use ROOT for robust absolute paths)
+	sim_dir = ROOT / "sims" / sim_name
+	vtu_dir = sim_dir / "pyfr_results" / case_name
+	out_dir = sim_dir / "training_data"
+	results = out_dir / f"{case_name}-results.csv"
+	key_inputs = out_dir / f"{case_name}-inputs.csv"
 
 	# Find vtu files
-	vtu_dir = f"{vtu_dir}/{case_name}"
-	vtus = sorted(glob.glob(os.path.join(vtu_dir, "*.vtu")))
+	vtus = sorted(vtu_dir.glob("*.vtu"))
 	if not vtus:
 		raise SystemExit(f"No .vtu files found in {vtu_dir}")
 
@@ -274,19 +275,26 @@ def extract_all_cases(sim_name: str) -> None:
 	Args:
 		sim_name (str): Name of the simulation directory under 'sims/'.
 	"""
-	# Project Paths
-	sim_dir = f"sims/{sim_name}"
-	results_root = f"{sim_dir}/pyfr_results"
 
-	# Convert Cases
-	cases = ([d for d in sorted(os.listdir(results_root)) if os.path.isdir(os.path.join(results_root, d))])
+	sim_dir = ROOT / "sims" / sim_name
+	results_root = sim_dir / "pyfr_results"
+
+	if not results_root.is_dir():
+		raise SystemExit(f"{results_root} does not exist or is not a directory")
+
+	# Find all case directories under pyfr_results
+	cases = [case_dir for case_dir in sorted(results_root.iterdir()) if case_dir.is_dir()]
 
 	mem_size = 0
-	for case in cases:
-		df = extract_csv(sim_name, case, return_df=True)
-		mem_size += df.memory_usage(deep=True).sum() / (1024 ** 2)
+	df = None
+	for case_dir in cases:
+		case_name = case_dir.name
+		df = extract_csv(sim_name, case_name, return_df=True)
+		# For polars DataFrame, estimate memory usage using estimated_size
+		mem_size += df.estimated_size("mb")
 
 	print(f"Results: {mem_size:.2f} MB")
+	return df
 
 
 if __name__ == "__main__":
@@ -295,7 +303,7 @@ if __name__ == "__main__":
 	# Single Case
 	case_name = "case0"
 	df = extract_csv(sim_name=sim_name, case_name=case_name) 
-	print(f"Results: {df.memory_usage(deep=True).sum() / (1024 ** 2):.2f} MB")
+	print(f"Results: {df.estimated_size('mb'):.2f} MB")
 	print(df.head(5))
 
 	# All cases

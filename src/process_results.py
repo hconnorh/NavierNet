@@ -6,6 +6,8 @@ import subprocess
 import re
 
 from typing import List, Tuple
+from pathlib import Path
+from tqdm import tqdm
 
 """
 Module: process_results.py
@@ -23,6 +25,8 @@ includes:
 Date: 09-May-2023
 Modified: 17-Sep-2025
 """
+
+ROOT = Path(__file__).resolve().parent.parent
 
 def find_mesh_file(sim_dir: str) -> str:
     """
@@ -85,17 +89,19 @@ def convert_case(sim_dir: str, case: str) -> None:
     # Extract numeric timesteps from filenames using regex; handle values like 0.00, 2.00, 19.95
     time_pattern = re.compile(r"-(?P<time>[0-9]+(?:\.[0-9]+)?)\.pyfrs$")
     indexed: List[Tuple[float, str]] = []
+    print(f"Converting {len(pyfrs_files)} .pyfrs files for {case}...")
     for f in pyfrs_files:
         name = os.path.basename(f)
         m = time_pattern.search(name)
         if not m:
             # Skip files that don't match expected pattern
+            print(f"WARNING: Skipping {f} because it doesn't match expected pattern")
             continue
         t = float(m.group("time"))
         indexed.append((t, f))
 
     if not indexed:
-        print(f"No .pyfrs with parseable time suffix found in {case_dir}; skipping")
+        print(f"WARNING: No .pyfrs with parseable time suffix found in {case_dir}; skipping")
         return None
 
     # Sort by numeric time, then by filename for stability
@@ -109,12 +115,12 @@ def convert_case(sim_dir: str, case: str) -> None:
         cmd_base = [sys.executable, "-m", "pyfr"] # Fallback to module
 
     # Convert files in numeric time order and assign sequential indices
-    for i, (t, sol_abspath) in enumerate(indexed):
+    for i, (t, sol_abspath) in tqdm(enumerate(indexed), total=len(indexed)):
         sol_name = os.path.basename(sol_abspath)
         out_file_rel = f"{prefix}_{i:04d}.vtu"
         
         # Convert file
-        print(f"Converting {sol_name} -> {os.path.join(out_dir, os.path.basename(out_file_rel))}")
+        # print(f"Converting {sol_name} -> {os.path.join(out_dir, os.path.basename(out_file_rel))}")
         mesh_rel_to_case = os.path.relpath(mesh_file, start=case_dir)
         subprocess.run(cmd_base + ["export", mesh_rel_to_case, sol_name,
                                    out_file_rel], check=True, cwd=case_dir)
@@ -131,15 +137,20 @@ def process_sim_results(sim_name: str) -> None:
     Args:
         sim_name (str): Name of the simulation directory under 'sims/'.
     """
-    # Project Paths
-    sim_dir = f"sims/{sim_name}"
-    results_root = f"{sim_dir}/pyfr_results"
-	
+    # Use pathlib for robust path manipulation
+
+    sim_dir = ROOT / "sims" / sim_name
+    results_root = sim_dir / "pyfr_results"
+
     # Convert Cases
-    cases = [d for d in sorted(os.listdir(results_root)) 
-             if os.path.isdir(os.path.join(results_root, d))]
-    for case in cases:
-        convert_case(sim_dir, case)
+    if not results_root.is_dir():
+        print(f"ERROR: Results directory {results_root} does not exist.")
+        return
+
+    cases = [d for d in sorted(results_root.iterdir()) if d.is_dir()]
+    for i, case_dir in enumerate(cases):
+        print(f"Converting ({i+1}/{len(cases)})...")
+        convert_case(str(sim_dir), case_dir.name)
 
 if __name__ == "__main__":
 
