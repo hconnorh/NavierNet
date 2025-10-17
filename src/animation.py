@@ -89,10 +89,17 @@ def gen_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis", off
 
 
 if __name__ == "__main__":
-    sim_name = "test2"
-    fps = 20                                   # Frames per second
-    cmap = "viridis"                           # Color map
-    off_screen = True                          # Render offscreen
-    window_size = (1920, 1080)                 # Resolution of rendered frames (width, height)
+    # Parameters
+    SIM_NAME = "example-model"
+    CASE_NAME = 'case0'
 
-    gen_mp4(sim_name, "case0", remove_images=True, fps=fps, cmap=cmap, off_screen=off_screen, window_size=window_size)
+    # Generate MP4 animation
+    gen_mp4(
+        SIM_NAME,
+        CASE_NAME, 
+        remove_images=True, 
+        fps=20, 
+        cmap="turbo", 
+        off_screen=True, 
+        window_size=(1920, 1088)
+    )
