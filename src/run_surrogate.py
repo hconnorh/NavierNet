@@ -2,10 +2,14 @@ import os
 import csv
 import torch
 import numpy as np
+from pathlib import Path
+from tqdm import tqdm
 
 from typing import Tuple
 
-from ml import SmallGraphModel
+from ml import SmallGraphModel, load_graph_data, get_device
+
+ROOT = Path(__file__).resolve().parent.parent
 
 def load_trained_model(ckpt_path: str, device: torch.device | None = None,
                        in_features_default: int = 6, 
@@ -73,7 +77,6 @@ def predict_next_step(model: SmallGraphModel, t_index: int, data: dict,
     p_next = (p_t + dp).cpu().numpy()
     return p_next, u_next, v_next
 
-
 def save_prediction_csv(out_path: str, step_out: int, x: np.ndarray, 
                         y: np.ndarray, p: np.ndarray, 
                         u: np.ndarray, v: np.ndarray, 
@@ -104,3 +107,119 @@ def save_prediction_csv(out_path: str, step_out: int, x: np.ndarray,
             w.writerow([step_out, int(nid), float(xi), float(yi), float(pi), 
                         float(ui), float(vi), float(vni)])
     print(f"Wrote predictions to {out_path}")
+
+
+def bootstrap_simulation(sim_name: str, case_name: str | None = None,
+                         steps: int = 200, start_step: int = 0,
+                         out_csv: str | None = None) -> str:
+    """
+    Roll forward purely with the surrogate starting from an initial observed state.
+
+    This performs an autoregressive rollout: it takes the state at `start_step`
+    from the graph dataset, then repeatedly applies the model's predicted deltas
+    to produce the next state, writing each predicted state's nodewise values to
+    a CSV compatible with simulation outputs.
+
+    Columns: step,node_id,n_x,n_y,p,u,v,vn
+    """
+    # Resolve case directory containing graph artifacts and checkpoint
+    graph_root = ROOT / "sims" / sim_name / "training_data" / "graph"
+    if case_name is None:
+        candidates = []
+        if graph_root.exists():
+            for d in sorted(p.name for p in graph_root.iterdir() if p.is_dir()):
+                if (graph_root / d / "model_graphsage.pt").exists():
+                    candidates.append(d)
+        if not candidates:
+            # Fallback to first case name under pyfr_results if graph not present
+            pr_root = ROOT / "sims" / sim_name / "pyfr_results"
+            cases = [p.name for p in sorted(pr_root.iterdir()) if p.is_dir()] if pr_root.exists() else []
+            if not cases:
+                raise SystemExit(f"Could not infer case_name under {graph_root} or {pr_root}")
+            case_name = cases[0]
+        else:
+            case_name = candidates[0]
+
+    ckpt_path = graph_root / case_name / "model_graphsage.pt"
+    if not ckpt_path.exists():
+        raise SystemExit(f"Model checkpoint not found: {ckpt_path}")
+
+    # Load data and model
+    data = load_graph_data(sim_name, case_name)
+    device = get_device()
+    model = load_trained_model(str(ckpt_path), device=device)
+
+    # Static graph tensors
+    node_x = torch.from_numpy(data["node_x"]).to(device)
+    node_y = torch.from_numpy(data["node_y"]).to(device)
+    node_flags = torch.from_numpy(data["node_flags"]).to(device).float()
+    edge_index = torch.from_numpy(data["edge_index"]).to(device)
+    static_feats = torch.stack([node_x, node_y, node_flags], dim=1)  # [N,3]
+
+    # Initial state
+    U = data["U"]; V = data["V"]; P = data["P"]
+    if U.shape[0] == 0:
+        raise SystemExit("Empty timeseries arrays in graph dataset")
+    start_step = int(max(0, min(start_step, U.shape[0] - 1)))
+    u_cur = torch.from_numpy(U[start_step]).to(device)
+    v_cur = torch.from_numpy(V[start_step]).to(device)
+    p_cur = torch.from_numpy(P[start_step]).to(device)
+
+    # Output path
+    if out_csv is None:
+        out_dir = ROOT / "sims" / sim_name / "training_data" / "rollouts"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_csv_path = out_dir / f"{case_name}-bootstrap.csv"
+    else:
+        out_csv_path = Path(out_csv)
+        out_csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Step base (match simulation-style step indexing when available)
+    base_step = int(data.get("steps", np.arange(U.shape[0]))[start_step])
+
+    # Stream predictions to CSV
+    N = node_x.shape[0]
+    xs = node_x.detach().cpu().numpy()
+    ys = node_y.detach().cpu().numpy()
+    node_ids = np.arange(N, dtype=np.int64)
+
+    with open(out_csv_path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["step","node_id","n_x","n_y","p","u","v","vn"])
+
+        for i in tqdm(range(1, int(steps) + 1)):
+            # Build node features and predict deltas
+            x_node = torch.stack([u_cur, v_cur, p_cur], dim=1)
+            x_node = torch.cat([x_node, static_feats], dim=1)  # [N,6]
+            pred_delta = model(x_node, edge_index)
+            du = pred_delta[:, 0]
+            dv = pred_delta[:, 1]
+            dp = pred_delta[:, 2]
+
+            u_next = u_cur + du
+            v_next = v_cur + dv
+            p_next = p_cur + dp
+
+            # Early stop on invalid values
+            if (torch.isnan(u_next).any() or torch.isnan(v_next).any() or torch.isnan(p_next).any() or
+                torch.isinf(u_next).any() or torch.isinf(v_next).any() or torch.isinf(p_next).any()):
+                print(f"Stopping rollout early at step {i} due to non-finite values")
+                break
+
+            # Materialize arrays for writing
+            u_np = u_next.detach().cpu().numpy()
+            v_np = v_next.detach().cpu().numpy()
+            p_np = p_next.detach().cpu().numpy()
+            vn_np = np.hypot(u_np, v_np)
+
+            step_out = base_step + i
+            for nid, xi, yi, pi, ui, vi, vni in zip(node_ids, xs, ys, p_np, u_np, v_np, vn_np):
+                w.writerow([int(step_out), int(nid), float(xi), float(yi), float(pi), float(ui), float(vi), float(vni)])
+
+            # Advance state
+            u_cur = u_next
+            v_cur = v_next
+            p_cur = p_next
+
+    print(f"Bootstrap rollout written to: {out_csv_path}")
+    return str(out_csv_path)
