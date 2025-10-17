@@ -9,7 +9,7 @@ import polars as pl
 from typing import Dict, Tuple, List, Optional
 from pathlib import Path
 
-from extract_training_data import _as_point_data
+from extract_data import _as_point_data
 
 ROOT = Path(__file__).resolve().parent.parent
 

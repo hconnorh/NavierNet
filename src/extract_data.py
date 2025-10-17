@@ -81,13 +81,13 @@ def _get_velocity_components(mesh: "pv.DataSet") -> Tuple[np.ndarray, np.ndarray
 	return vec[:, 0].ravel(), vec[:, 1].ravel()
 
 
-def _build_reference_index(points_xy: np.ndarray) -> Dict[Tuple[float, float], int]:
-	"""Use rounding to stabilise float keys"""
-	keys = [(
-		float(round(x, 12)),
-		float(round(y, 12))
-	) for x, y in points_xy]
-	return {k: i for i, k in enumerate(keys)}
+# def _build_reference_index(points_xy: np.ndarray) -> Dict[Tuple[float, float], int]:
+# 	"""Use rounding to stabilise float keys"""
+# 	keys = [(
+# 		float(round(x, 12)),
+# 		float(round(y, 12))
+# 	) for x, y in points_xy]
+# 	return {k: i for i, k in enumerate(keys)}
 
 
 def _build_unique_reference(points_xy: np.ndarray, decimals: int = 12) -> Tuple[np.ndarray, Dict[Tuple[float, float], int]]:
@@ -210,7 +210,23 @@ def extract_csv(sim_name: str, case_name: str, return_df: bool=True) -> None:
 	# Prepare output buffer: rows = num_steps * num_nodes, cols = 7 (step, n_x, n_y, p, u, v, vn)
 	num_steps = len(vtus)
 	num_nodes = ref_xy.shape[0]
-	out_arr = np.empty((num_steps * num_nodes, 7), dtype=float)
+
+	# Write a stable node map once per case to ensure consistent IDs across datasets
+	node_map_path = out_dir / f"{case_name}-node_map.csv"
+	node_ids_arr = np.arange(num_nodes, dtype=float)
+	node_map_arr = np.column_stack([node_ids_arr, ref_xy[:, 0], ref_xy[:, 1]])
+	# Columns: node_id (int-like), n_x, n_y
+	np.savetxt(
+		node_map_path,
+		node_map_arr,
+		delimiter=",",
+		fmt="%.16g",
+		header=",".join(["node_id", "n_x", "n_y"]),
+		comments="",
+	)
+
+	# Prepare output buffer: rows = num_steps * num_nodes, cols = 8 (step, node_id, n_x, n_y, p, u, v, vn)
+	out_arr = np.empty((num_steps * num_nodes, 8), dtype=float)
 
 	# Process each timestep and fill output buffer
 	for step, vtu_path in tqdm(list(enumerate(vtus))):
@@ -229,9 +245,10 @@ def extract_csv(sim_name: str, case_name: str, return_df: bool=True) -> None:
 			ref_map, xy, p_arr, u_arr, v_arr, decimals=12,
 		)
 
-		# Build block for this timestep: [step, n_x, n_y, p, u, v, vn]
+		# Build block for this timestep: [step, node_id, n_x, n_y, p, u, v, vn]
 		block = np.column_stack([
 			np.full(num_nodes, step, dtype=float),
+			node_ids_arr,
 			ref_xy[:, 0],
 			ref_xy[:, 1],
 			p_arr,
@@ -251,14 +268,15 @@ def extract_csv(sim_name: str, case_name: str, return_df: bool=True) -> None:
 		out_arr,
 		delimiter=",",
 		fmt="%.16g",
-		header=",".join(["step", "n_x", "n_y", "p", "u", "v", "vn"]),
+		header=",".join(["step", "node_id", "n_x", "n_y", "p", "u", "v", "vn"]),
 		comments="",
 	)
 
 	print(f"Wrote combined CSV: {results}")
+	print(f"Wrote node map CSV: {node_map_path}")
 
 	if return_df:
-		cols = ["step", "n_x", "n_y", "p", "u", "v", "vn"]
+		cols = ["step", "node_id", "n_x", "n_y", "p", "u", "v", "vn"]
 		return pl.DataFrame({col: out_arr[:, i] for i, col in enumerate(cols)})
 
 def extract_all_cases(sim_name: str) -> None:

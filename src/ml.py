@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # === GENERAL UTILS ===
 
-def _get_device() -> torch.device:
+def get_device() -> torch.device:
     """Returns the best available torch device (MPS, CUDA, or CPU)"""
     if torch.backends.mps.is_available():
         return torch.device("mps")
@@ -357,7 +357,7 @@ def train_model(sim_name: str, case_name: str, epochs: int = 5,
     train_steps = all_steps[:-num_val] if all_steps.shape[0] > 1 else all_steps
     val_steps = all_steps[-num_val:] if all_steps.shape[0] > 1 else all_steps
 
-    device = _get_device()
+    device = get_device()
     edge_index = edge_index.to(device)
     edge_attr = edge_attr.to(device)
     static_feats = static_feats.to(device)
