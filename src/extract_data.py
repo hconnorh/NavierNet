@@ -1,5 +1,3 @@
-import os
-import glob
 import numpy as np
 import polars as pl
 import pyvista as pv
