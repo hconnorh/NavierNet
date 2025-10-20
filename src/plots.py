@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os
+
 import numpy as np
 import polars as pl
 import plotly.graph_objects as go
@@ -56,15 +56,16 @@ def _ensure_pandas_sorted(df):
 	return df
 
 
-def plot_column(df: str, col: str, case_name: int| None = None, 
-                step: int | None = None, theme: str ="Turbo") -> None:
+def plot_column(df: str, col: str, step: int | None = None, title: str = None,
+			    theme: str ="Turbo") -> None:
 	"""
-    Scatter plot x/y colored by the requested column at a given step.
-
-	- column: name from the CSV header (e.g., "p", "u", "v", "vn").
-	- sim_name: name of the simulation (used to locate the CSV file).
-	- step: specific step to filter; if None, uses the last available step.
-	- output_html: optional path to write HTML; if None, writes next to CSV.
+    Scatter plot x/y colored by the requested column at a given step
+	.
+	Args:
+		df (pandas DataFrame):	 pandas DataFrame with the data to plot.
+		col (str): name from the CSV header (e.g., "p", "u", "v", "vn").
+		step (int | None): specific step to filter; if None, uses the last available step.
+		theme (str): theme for the plot.
 	"""
 
 	# Check if the requested step exists; if step is None, pick max step
@@ -83,7 +84,24 @@ def plot_column(df: str, col: str, case_name: int| None = None,
 	vmin = float(np.min(vals))
 	vmax = float(np.max(vals))
 	color_vals = vals if vmax > vmin else np.zeros_like(vals, dtype=float)
-	title = f"{col} over x/y" + (f" (step {step})" if step is not None else "")
+
+	# Tight axis ranges to data bounds (handle degenerate ranges)
+	xmin = float(np.min(x))
+	xmax = float(np.max(x))
+	ymin = float(np.min(y))
+	ymax = float(np.max(y))
+	if xmax == xmin:
+		xmin -= 1.0
+		xmax += 1.0
+	if ymax == ymin:
+		ymin -= 1.0
+		ymax += 1.0
+
+	if title is None:
+		title = f"{col} over x/y" + (f" (step {step})" if step is not None else "")
+	else: 
+		title = f"{title} (step {step})"
+		
 	fig = px.scatter(
 		x=x,
 		y=y,
@@ -91,16 +109,19 @@ def plot_column(df: str, col: str, case_name: int| None = None,
 		color_continuous_scale=theme,
 		render_mode="webgl",
 		labels={"color": col},
-		title=title
+		title=title,
+		range_x=[xmin, xmax],
+		range_y=[ymin, ymax],
 	)
 	fig.update_traces(marker=dict(size=4))
 	fig.update_layout(
 		coloraxis_colorbar_title_text=col,
 		width=900,
-		height=500,
+		# height=450,
 		margin=dict(l=40, r=40, t=60, b=40)
 	)
-	fig.update_yaxes(scaleanchor="x", scaleratio=1)
+	fig.update_xaxes(scaleanchor="y", scaleratio=1)
+	# Note: avoid equal-aspect constraint so axes match data min/max exactly
 
 	return fig
 
@@ -331,6 +352,123 @@ def plot_training_gap(df):
 	fig.add_vline(
 		x=best_epoch, line_width=1, name="best_epoch (val_loss)",
 		line_dash="dot", line_color=VS_PALLET['pink']
+	)
+
+	return fig
+
+
+def plot_compare(df_sim, df_ml, df_res, metric, step):
+	"""
+	Plot comparison of simulation, surrogate, and residual predictions for a
+	single timestep in a 3-row layout with a shared Turbo colorscale.
+
+	Args:
+		df_sim: DataFrame (pandas or polars) of simulation truth rows
+		df_ml: DataFrame (pandas or polars) of surrogate rows
+		df_res: DataFrame (pandas or polars) of residual rows
+		metric (str): column to color by (e.g., "p", "u", "v", "vn")
+		step (int): timestep to visualize
+
+	Returns:
+		plotly.graph_objects.Figure
+	"""
+	# Normalize input dataframes
+	def _ensure_pandas(dfx):
+		if isinstance(dfx, pl.DataFrame):
+			return dfx.to_pandas()
+		return dfx
+
+	df_sim = _ensure_pandas(df_sim)
+	df_ml = _ensure_pandas(df_ml)
+	df_res = _ensure_pandas(df_res)
+
+	# Filter by step and validate
+	def _pick(df):
+		out = df[df["step"] == step]
+		if len(out) == 0:
+			raise SystemExit(f"No rows for step={step}")
+		return out
+
+	ds = _pick(df_sim)
+	dm = _pick(df_ml)
+	dr = _pick(df_res)
+
+	# Compute tight global axis bounds across all three panels
+	xmin = float(min(ds["n_x"].min(), dm["n_x"].min(), dr["n_x"].min()))
+	xmax = float(max(ds["n_x"].max(), dm["n_x"].max(), dr["n_x"].max()))
+	ymin = float(min(ds["n_y"].min(), dm["n_y"].min(), dr["n_y"].min()))
+	ymax = float(max(ds["n_y"].max(), dm["n_y"].max(), dr["n_y"].max()))
+	if xmax == xmin:
+		xmin -= 1.0; xmax += 1.0
+	if ymax == ymin:
+		ymin -= 1.0; ymax += 1.0
+
+	# Color range shared across all traces (ensures consistent bar)
+	def _range_for(arr: np.ndarray) -> tuple[float, float]:
+		lo = float(np.min(arr)); hi = float(np.max(arr))
+		if not np.isfinite(lo) or not np.isfinite(hi):
+			raise SystemExit("Non-finite values encountered in metric column")
+		if hi == lo:
+			lo -= 1.0; hi += 1.0
+		return lo, hi
+
+	cmin_s, cmax_s = _range_for(ds[metric].to_numpy().astype(float))
+	cmin_m, cmax_m = _range_for(dm[metric].to_numpy().astype(float))
+	cmin_r, cmax_r = _range_for(dr[metric].to_numpy().astype(float))
+
+	# Build subplot canvas
+	fig = make_subplots(
+		rows=3, cols=1, vertical_spacing=0.07,
+		subplot_titles=["Truth (Sim)", "ML (Prediction)", "Residual (Pct Rel Error)"]
+	)
+
+	def add_panel(dfp, rowi, axis_key: str):
+		fig.add_trace(
+			go.Scattergl(
+				x=dfp["n_x"], y=dfp["n_y"], mode="markers",
+				marker=dict(
+					size=4,
+					color=dfp[metric].to_numpy(),
+					coloraxis=axis_key,
+				),
+				showlegend=False,
+			),
+			row=rowi, col=1,
+		)
+		# Tight and equal-aspect axes for this row
+		fig.update_xaxes(range=[xmin, xmax], row=rowi, col=1)
+		fig.update_yaxes(range=[ymin, ymax], scaleanchor=f"x{rowi}", scaleratio=1, row=rowi, col=1)
+
+	# Add three panels
+	add_panel(ds, 1, "coloraxis")
+	add_panel(dm, 2, "coloraxis2")
+	add_panel(dr, 3, "coloraxis3")
+
+	# Position colorbars alongside each row domain
+	# Retrieve y domains for rows 1..3
+	ydom1 = fig.layout.yaxis.domain
+	ydom2 = fig.layout.yaxis2.domain
+	ydom3 = fig.layout.yaxis3.domain
+
+	fig.update_layout(
+		title=f"Nodal Residual Analysis | Step {step}",
+		width=900,
+		height=900*1.4,
+		showlegend=False,
+		margin=dict(l=40, r=40, t=80, b=40),
+		# Individual coloraxes
+		coloraxis=dict(
+			colorscale="Turbo", showscale=True, cmin=cmin_s, cmax=cmax_s,
+			colorbar=dict(y=(ydom1[0]+ydom1[1])/2.0, yanchor="middle", len=ydom1[1]-ydom1[0])
+		),
+		coloraxis2=dict(
+			colorscale="Turbo", showscale=True, cmin=cmin_m, cmax=cmax_m,
+			colorbar=dict(y=(ydom2[0]+ydom2[1])/2.0, yanchor="middle", len=ydom2[1]-ydom2[0])
+		),
+		coloraxis3=dict(
+			colorscale="Turbo", showscale=True, cmin=cmin_r, cmax=cmax_r,
+			colorbar=dict(y=(ydom3[0]+ydom3[1])/2.0, yanchor="middle", len=ydom3[1]-ydom3[0])
+		),
 	)
 
 	return fig

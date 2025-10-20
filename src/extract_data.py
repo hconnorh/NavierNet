@@ -81,15 +81,6 @@ def _get_velocity_components(mesh: "pv.DataSet") -> Tuple[np.ndarray, np.ndarray
 	return vec[:, 0].ravel(), vec[:, 1].ravel()
 
 
-# def _build_reference_index(points_xy: np.ndarray) -> Dict[Tuple[float, float], int]:
-# 	"""Use rounding to stabilise float keys"""
-# 	keys = [(
-# 		float(round(x, 12)),
-# 		float(round(y, 12))
-# 	) for x, y in points_xy]
-# 	return {k: i for i, k in enumerate(keys)}
-
-
 def _build_unique_reference(points_xy: np.ndarray, decimals: int = 12) -> Tuple[np.ndarray, Dict[Tuple[float, float], int]]:
 	"""
 	Create a unique (x, y) list by rounding coordinates and mapping each rounded
