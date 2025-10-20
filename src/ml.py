@@ -2,6 +2,7 @@ import os
 import json
 import torch
 import numpy as np
+import pandas as pd
 
 from typing import Dict, Tuple, List
 from pathlib import Path
@@ -19,6 +20,56 @@ def get_device() -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
+
+def calculate_residuals(df_sim, df_ml):
+    """
+    Calculate absolute percentage residuals between simulation (truth) and ML 
+    predictions for each node and each step.
+
+    This function compares the predicted values from surrogate model 
+    (df_ml) with ground-truth simulation results (df_sim). It merges the two 
+    DataFrames on ['step','node_id'], aligns nodal coordinates 
+    (rounded to 12 decimals for uniqueness), and computes the absolute 
+    percentage residuals for each field: pressure (p), velocity components 
+    (u, v), and normal velocity (vn).
+
+    Args:
+        df_sim (pd.DataFrame): df containing simulation (ground truth) results.
+                               Must contain columns ['step', 'node_id', 'n_x', 
+                               'n_y', 'p', 'u', 'v', 'vn'] 
+        df_ml  (pd.DataFrame): df containing ML predictions with the same 
+                               structure as df_sim.
+
+    Returns:
+        pd.DataFrame: df where p, u, v, vn are the absolute pct residuals, i.e.
+                      |prediction - truth| / |truth| for each field.
+    """
+    # Round to match extractor's 12-decimal uniqueness
+    df_sim[['n_x','n_y']] = df_sim[['n_x','n_y']].round(12)
+    df_ml[['n_x','n_y']]  = df_ml[['n_x','n_y']].round(12)
+
+    # Merge on node_id
+    pd.merge(
+        df_sim, df_ml, on=['step','node_id'], how='inner', validate='one_to_one'
+    )
+
+    df_tmp = pd.merge(
+        df_sim, df_ml, on=['step','node_id'], suffixes=('_true','_pred'), how='inner'
+    )
+
+    df_res = pd.DataFrame({
+        'node_id': df_tmp['node_id'],
+        'n_x': df_tmp['n_x_true'],
+        'n_y': df_tmp['n_y_true'],
+        'p': ((df_tmp['p_pred'] - df_tmp['p_true'])/df_tmp['p_true']).abs(),
+        'u': ((df_tmp['u_pred'] - df_tmp['u_true'])/df_tmp['u_true']).abs(),
+        'v': ((df_tmp['v_pred'] - df_tmp['v_true'])/df_tmp['v_true']).abs(),
+        'vn': ((df_tmp['vn_pred'] - df_tmp['vn_true'])/df_tmp['vn_true']).abs(),
+        'step': df_tmp['step']
+    })
+
+    return df_res
+
 
 
 # === ML CLASSES ===
