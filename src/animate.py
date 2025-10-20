@@ -14,14 +14,27 @@ from plots import plot_compare
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis", off_screen=True, window_size=(1920, 1080)):
+"""
+Module: animate.py
+Package: NavierNet
+Author: @hconnorh
+
+Description: Provides utility functions for turning png plots and vtu files 
+             into animations.
+"""
+
+
+def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis", 
+               off_screen=True, window_size=(1920, 1080)):
     """
-    Generate an MP4 animation of velocity magnitude from a sequence of .vtu files.
+    Generate an MP4 animation of velocity magnitude from a sequence of .vtu 
+    files.
 
     Args:
         sim_name (str): The simulation name (used as a directory under "sims/").
         case_name (str): The case name (directory under "pyfr_results").
-        remove_images (bool): Whether to remove the temporary frames after making video.
+        remove_images (bool): Whether to remove the temporary frames after 
+        making video.
 
     Output:
         An MP4 video is saved to sims/{sim_name}/animations/{sim_name}-{case_name}.mp4
@@ -125,7 +138,7 @@ def _prepare_frame(img: np.ndarray, target_w, target_h) -> np.ndarray:
     # Resize to fit within target while preserving aspect ratio
     if (in_w > target_w or in_h > target_h) or (in_w < target_w or in_h < target_h):
         if Image is None:
-            # Without Pillow, we can only pad/crop when input fits; otherwise instruct to install pillow
+            # Without Pillow, we can only pad/crop when input fits
             if in_w <= target_w and in_h <= target_h:
                 # Center pad without resizing
                 x0 = (target_w - in_w) // 2
@@ -205,8 +218,9 @@ def png_to_mp4(img_dir, output_mp4, fps=20, window_size=(1920, 1080)):
 
     print(f"Animation saved to {output_mp4}")
 
-def animate_residuals(df_sim, df_ml, df_res, sim_name: str, dir_name: str = 'residuals', 
-                      fps: int = 20, window_size: tuple[int, int] = (1920, 1080)):
+def animate_residuals(df_sim, df_ml, df_res, sim_name: str, 
+                      dir_name: str = 'residuals', fps: int = 20, 
+                      window_size: tuple[int, int] = (1920, 1080)):
 
     img_dir = ROOT / "sims" / sim_name / "animations" / f"{dir_name}"
     img_dir.mkdir(parents=True, exist_ok=True)
@@ -221,7 +235,7 @@ def animate_residuals(df_sim, df_ml, df_res, sim_name: str, dir_name: str = 'res
     
     png_to_mp4(
         img_dir=img_dir,
-        output_mp4=img_dir.parent / f"{sim_name}-residual-plots.mp4",
+        output_mp4=img_dir.parent / f"{dir_name}-{sim_name}-residual-plots.mp4",
         fps=fps,
         window_size=window_size,  # must be even; will auto-adjust to even
     )   

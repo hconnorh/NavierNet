@@ -6,9 +6,10 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 
+
 """
 Module: plot_static_results.py
-Package: NS2D-Surrogate
+Package: NavierNet
 Author: @hconnorh
 Description:
 
@@ -24,10 +25,8 @@ Key Features:
     - Loads case-specific extracted CSV files from a simulation folder
     - Visualises fields (pressure, velocity components, etc.) over the mesh
     - Presents plots using Plotly web/webgl for large datasets
-
-Date: 09-May-2023
-Modified: 17-Sep-2025
 """
+
 
 # Best with VS-CODE Monokai Pro theme
 VS_PALLET = {
@@ -341,8 +340,8 @@ def plot_training_gap(df):
 		data = df[c].to_numpy()
 		fig.add_trace(
 			go.Scatter(
-			x=epochs, y=data, mode="lines+markers", name=c, 
-			line=dict(color=VS_PALLET[c_keys[i]])
+				x=epochs, y=data, mode="lines+markers", name=c, 
+				line=dict(color=VS_PALLET[c_keys[i]])
 			)
 		)
 
@@ -456,6 +455,7 @@ def plot_compare(df_sim, df_ml, df_res, metric, step):
 		height=900*1.4,
 		showlegend=False,
 		margin=dict(l=40, r=40, t=80, b=40),
+		
 		# Individual coloraxes
 		coloraxis=dict(
 			colorscale="Turbo", showscale=True, cmin=cmin_s, cmax=cmax_s,

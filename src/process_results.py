@@ -9,9 +9,10 @@ from typing import List, Tuple
 from pathlib import Path
 from tqdm import tqdm
 
+
 """
 Module: process_results.py
-Package: NS2D-Surrogate
+Package: NavierNet
 Author: @hconnorh
 Description: 
 
@@ -21,10 +22,8 @@ includes:
 	- Writing .pvd files to describe time series of VTU files.
 	- Converting simulation result files (.pyfrs) to .VTU format and generating 
       extracting nodal results.
-
-Date: 09-May-2023
-Modified: 17-Sep-2025
 """
+
 
 ROOT = Path(__file__).resolve().parent.parent
 

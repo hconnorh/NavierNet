@@ -11,6 +11,20 @@ from ml import SmallGraphModel, load_graph_data, get_device
 
 ROOT = Path(__file__).resolve().parent.parent
 
+
+"""
+Module: run_surrogate.py
+Package: NavierNet
+Author: @hconnorh
+Description:
+
+High-level utilities to run a trained surrogate model. It loads graph artifacts 
+and model checkpoints, performs next-step predictions and/or bootstrapped 
+simulations (autoregressive rollouts) over mesh graphs. Intended for inference 
+and evaluation after training in `ml.py`.
+"""
+
+
 def load_trained_model(ckpt_path: str, device: torch.device | None = None,
                        in_features_default: int = 6, 
                        hidden_default: int = 128) -> SmallGraphModel:
@@ -138,7 +152,7 @@ def run_all_predictions(model: SmallGraphModel, data: dict,
         meta = data.get("meta", {})
         sim_nm = meta.get("sim_name", "unknown-sim")
         case_nm = meta.get("case_name", "unknown-case")
-        out_dir = ROOT / "sims" / sim_nm / "training_data" / "rollouts"
+        out_dir = ROOT / "sims" / sim_nm / "ml_training" / "rollouts"
         out_csv_path = out_dir / f"{case_nm}-teacher_forced.csv"
     else:
         out_csv_path = Path(out_csv)
@@ -201,7 +215,7 @@ def bootstrap_simulation(sim_name: str, case_name: str | None = None,
     Columns: step,node_id,n_x,n_y,p,u,v,vn
     """
     # Resolve case directory containing graph artifacts and checkpoint
-    graph_root = ROOT / "sims" / sim_name / "training_data" / "graph"
+    graph_root = ROOT / "sims" / sim_name / "ml_training" / "graph"
     if case_name is None:
         candidates = []
         if graph_root.exists():
@@ -245,7 +259,7 @@ def bootstrap_simulation(sim_name: str, case_name: str | None = None,
 
     # Output path
     if out_csv is None:
-        out_dir = ROOT / "sims" / sim_name / "training_data" / "rollouts"
+        out_dir = ROOT / "sims" / sim_name / "ml_training" / "bootstrapped"
         out_csv_path = out_dir / f"{case_name}-bootstrap.csv"
     else:
         out_csv_path = Path(out_csv)
@@ -274,9 +288,10 @@ def bootstrap_simulation(sim_name: str, case_name: str | None = None,
         p_next = p_cur + dp
 
         # Early stop on invalid values
-        if (torch.isnan(u_next).any() or torch.isnan(v_next).any() or torch.isnan(p_next).any() or
-            torch.isinf(u_next).any() or torch.isinf(v_next).any() or torch.isinf(p_next).any()):
-            print(f"Stopping rollout early at step {i} due to non-finite values")
+        if (torch.isnan(u_next).any() or torch.isnan(v_next).any() or 
+            torch.isnan(p_next).any() or torch.isinf(u_next).any() or 
+            torch.isinf(v_next).any() or torch.isinf(p_next).any()):
+            print(f"Stopping early at step {i} due to non-finite values")
             break
 
         # Materialize arrays and append

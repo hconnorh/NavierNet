@@ -11,6 +11,23 @@ from tqdm import tqdm
 ROOT = Path(__file__).resolve().parent.parent
 
 
+"""
+Module: ml.py
+Package: NavierNet
+Author: @hconnorh
+Description:
+
+High-level training pipeline for a graph-based surrogate of fluid dynamics. It
+defines a compact message‑passing neural network to evolve nodal states on a
+mesh, utilities to load graph topology and time‑series fields and a training
+routine that learns per‑node state deltas while enforcing physics‑motivated
+regularisation (e.g., divergence and boundary consistency).
+
+Running this file trains the surrogate for a chosen simulation case with 
+configurable hyperparameters.
+"""
+
+
 # === GENERAL UTILS ===
 
 def get_device() -> torch.device:
@@ -296,7 +313,7 @@ def load_graph_data(sim_name: str, case_name: str) -> Dict[str, np.ndarray]:
     """
     Load graph data from the training data directory.
     """
-    base_dir = ROOT / "sims" / sim_name / "training_data" / "graph" / case_name
+    base_dir = ROOT / "sims" / sim_name / "ml_training" / "graph" / case_name
     graph_npz = base_dir / "graph.npz"
     ts_npz = base_dir / "timeseries.npz"
     meta_json = base_dir / "meta.json"
@@ -531,7 +548,7 @@ def train_model(sim_name: str, case_name: str, epochs: int = 5,
         })
 
     # Save model
-    out_dir = ROOT / "sims" / sim_name / "training_data" / "graph" / case_name
+    out_dir = ROOT / "sims" / sim_name / "ml_training" / "graph" / case_name
     out_dir.mkdir(parents=True, exist_ok=True)
     model_path = out_dir / "model_graphsage.pt"
     torch.save({

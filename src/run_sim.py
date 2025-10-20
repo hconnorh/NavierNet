@@ -8,9 +8,10 @@ import sys
 
 from tqdm import tqdm
 
+
 """
 Module: run_sim.py
-Package: NS2D-Surrogate
+Package: NavierNet
 Author: @hconnorh
 Description: 
 
@@ -18,10 +19,8 @@ This module provides the pyfrSimulation class, a utility for running PyFR
 simulations, preparing and customising input files and managing simulation 
 assets and configuration. It is used in automated workflows for parameter 
 studies or ML training data generation.
-
-Date: 09-May-2023
-Modified: 17-Sep-2025
 """
+
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,7 +28,8 @@ class PyfrSimulation:
     """
     A wrapper for running bulk PyFR simulations.
     """
-    def __init__(self, sim_name, mesh_file=None, pyfrm_file=None, ini_file=None):
+    def __init__(self, sim_name, mesh_file=None, 
+                       pyfrm_file=None, ini_file=None):
         self.sim_name = sim_name
 
         # Resolve paths relative to repo root 
@@ -54,8 +54,9 @@ class PyfrSimulation:
 
     def _generate_pyfrm_mesh(self):
         """
-        Converts the mesh file (.msh) for the simulation into a PyFR mesh file (.pyfrm)
-        using the PyFR import utility. This is required before running the simulation.
+        Converts the mesh file (.msh) for the simulation into a PyFR mesh file 
+        (.pyfrm) using the PyFR import utility. This is required before running 
+        the simulation.
         """
         cmd = self._pyfr_base_cmd(show_progress=False) + [
             "import", "-t", "gmsh", self.mesh_file, self.pyfrm_file
@@ -64,11 +65,15 @@ class PyfrSimulation:
             subprocess.run(cmd, check=True)
         except FileNotFoundError as e:
             raise FileNotFoundError(
-                "PyFR CLI not found. Ensure PyFR is installed and on PATH, or install into this env"
+                "PyFR CLI not found. Ensure PyFR is installed and on PATH, or "
+                "install into this env"
             ) from e
 
     def _pyfr_base_cmd(self, show_progress):
-        """Return the base PyFR command, preferring the CLI if available, otherwise python -m pyfr."""
+        """
+        Return the base PyFR command, preferring the CLI if available, 
+        otherwise python -m pyfr.
+        """
         pyfr_exe = shutil.which("pyfr")
         cmd = [pyfr_exe] if pyfr_exe else [sys.executable, "-m", "pyfr"]
         if show_progress:
@@ -150,7 +155,7 @@ class PyfrSimulation:
         self.sim_dir = f"{self.base_dir}/{self.sim_name}"
         self.sim_results_dir = f"{self.sim_dir}/pyfr_results"
         self.animations_dir = f"{self.sim_dir}/animations"
-        self.training_dir = f"{self.sim_dir}/training_data"
+        self.training_dir = f"{self.sim_dir}/ml_training"
         self.sim_config_dir = f"{self.sim_dir}/config"
         for d in [self.sim_dir, self.sim_results_dir, self.animations_dir,
                   self.training_dir, self.sim_config_dir]:
@@ -174,9 +179,11 @@ class PyfrSimulation:
         df.write_csv(f"{self.training_dir}/case-inputs.csv")
 
 
-    def run(self, pyfrm_file, ini_file, backend=None, results_dir=None, show_progress=True):
+    def run(self, pyfrm_file, ini_file, backend=None, 
+                  results_dir=None, show_progress=True):
         """
-        Run a PyFR simulation with the given mesh (.pyfrm) and config (.ini) files.
+        Run a PyFR simulation with the given mesh (.pyfrm) and configuration
+        from (.ini) files.
 
         Parameters
         ----------
