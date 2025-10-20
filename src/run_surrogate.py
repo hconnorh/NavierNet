@@ -109,9 +109,87 @@ def save_prediction_csv(out_path: str, step_out: int, x: np.ndarray,
     print(f"Wrote predictions to {out_path}")
 
 
+def run_all_predictions(model: SmallGraphModel, data: dict,
+                        device: torch.device | None = None,
+                        steps: int | None = None,
+                        start_step: int = 0,
+                        out_csv: str | None = None,
+                        overwrite: bool = True) -> list[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """
+    Predict the next state for multiple consecutive timesteps (teacher-forced)
+    and write all predicted states to a CSV with the standard schema.
+
+    Returns a list of (p_next, u_next, v_next) arrays for each predicted step.
+    """
+    
+    device = get_device() if device is None else device
+
+    # Timeseries boundaries
+    U = data["U"]
+    T = int(U.shape[0])
+    if T < 2:
+        return []
+    start_step = int(max(0, min(start_step, T - 2)))  # must have a next step
+    max_steps = (T - 1) - start_step
+    num_steps = int(max_steps if steps is None else min(steps, max_steps))
+
+    # Output CSV path
+    if out_csv is None:
+        meta = data.get("meta", {})
+        sim_nm = meta.get("sim_name", "unknown-sim")
+        case_nm = meta.get("case_name", "unknown-case")
+        out_dir = ROOT / "sims" / sim_nm / "training_data" / "rollouts"
+        out_csv_path = out_dir / f"{case_nm}-teacher_forced.csv"
+    else:
+        out_csv_path = Path(out_csv)
+
+    # Prepare static geometry for writing
+    xs = np.asarray(data["node_x"], dtype=float)
+    ys = np.asarray(data["node_y"], dtype=float)
+
+    # Step indices (prefer dataset-provided step numbers)
+    steps_arr = data.get("steps", np.arange(T, dtype=int))
+
+    # Init/overwrite CSV and append per predicted step
+    _init_rollout_csv(out_csv_path, overwrite=overwrite)
+    
+    for t in tqdm(range(start_step, start_step + num_steps)):
+        p_next, u_next, v_next = predict_next_step(model, t, data, device)
+        step_out = int(steps_arr[t + 1])
+        _append_rollout_step(out_csv_path, step_out, xs, ys, p_next, u_next, v_next)
+
+    print(f"Predictions written to: {out_csv_path}")
+    return out_csv_path
+
+
+def _init_rollout_csv(out_csv_path: Path, overwrite: bool = True) -> None:
+    """
+    Create or reset a rollout CSV with the standard header.
+    """
+    out_csv_path.parent.mkdir(parents=True, exist_ok=True)
+    if overwrite and out_csv_path.exists():
+        out_csv_path.unlink()
+    with open(out_csv_path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["step","node_id","n_x","n_y","p","u","v","vn"])
+
+
+def _append_rollout_step(out_csv_path: Path, step_out: int,
+                         xs: np.ndarray, ys: np.ndarray,
+                         p: np.ndarray, u: np.ndarray, v: np.ndarray) -> None:
+    """
+    Append one timestep worth of node rows to an existing rollout CSV.
+    """
+    vn = np.hypot(u, v)
+    node_ids = np.arange(xs.shape[0], dtype=np.int64)
+    with open(out_csv_path, "a", newline="") as f:
+        w = csv.writer(f)
+        for nid, xi, yi, pi, ui, vi, vni in zip(node_ids, xs, ys, p, u, v, vn):
+            w.writerow([int(step_out), int(nid), float(xi), float(yi), float(pi), float(ui), float(vi), float(vni)])
+
 def bootstrap_simulation(sim_name: str, case_name: str | None = None,
                          steps: int = 200, start_step: int = 0,
-                         out_csv: str | None = None) -> str:
+                         out_csv: str | None = None, overwrite: bool = True) -> str:
     """
     Roll forward purely with the surrogate starting from an initial observed state.
 
@@ -168,58 +246,50 @@ def bootstrap_simulation(sim_name: str, case_name: str | None = None,
     # Output path
     if out_csv is None:
         out_dir = ROOT / "sims" / sim_name / "training_data" / "rollouts"
-        out_dir.mkdir(parents=True, exist_ok=True)
         out_csv_path = out_dir / f"{case_name}-bootstrap.csv"
     else:
         out_csv_path = Path(out_csv)
-        out_csv_path.parent.mkdir(parents=True, exist_ok=True)
+
 
     # Step base (match simulation-style step indexing when available)
     base_step = int(data.get("steps", np.arange(U.shape[0]))[start_step])
 
-    # Stream predictions to CSV
+    # Init CSV (overwrite on reruns), then append per predicted step
     N = node_x.shape[0]
     xs = node_x.detach().cpu().numpy()
     ys = node_y.detach().cpu().numpy()
-    node_ids = np.arange(N, dtype=np.int64)
+    _init_rollout_csv(out_csv_path, overwrite=overwrite)
 
-    with open(out_csv_path, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["step","node_id","n_x","n_y","p","u","v","vn"])
+    for i in tqdm(range(1, int(steps) + 1)):
+        # Build node features and predict deltas
+        x_node = torch.stack([u_cur, v_cur, p_cur], dim=1)
+        x_node = torch.cat([x_node, static_feats], dim=1)  # [N,6]
+        pred_delta = model(x_node, edge_index)
+        du = pred_delta[:, 0]
+        dv = pred_delta[:, 1]
+        dp = pred_delta[:, 2]
 
-        for i in tqdm(range(1, int(steps) + 1)):
-            # Build node features and predict deltas
-            x_node = torch.stack([u_cur, v_cur, p_cur], dim=1)
-            x_node = torch.cat([x_node, static_feats], dim=1)  # [N,6]
-            pred_delta = model(x_node, edge_index)
-            du = pred_delta[:, 0]
-            dv = pred_delta[:, 1]
-            dp = pred_delta[:, 2]
+        u_next = u_cur + du
+        v_next = v_cur + dv
+        p_next = p_cur + dp
 
-            u_next = u_cur + du
-            v_next = v_cur + dv
-            p_next = p_cur + dp
+        # Early stop on invalid values
+        if (torch.isnan(u_next).any() or torch.isnan(v_next).any() or torch.isnan(p_next).any() or
+            torch.isinf(u_next).any() or torch.isinf(v_next).any() or torch.isinf(p_next).any()):
+            print(f"Stopping rollout early at step {i} due to non-finite values")
+            break
 
-            # Early stop on invalid values
-            if (torch.isnan(u_next).any() or torch.isnan(v_next).any() or torch.isnan(p_next).any() or
-                torch.isinf(u_next).any() or torch.isinf(v_next).any() or torch.isinf(p_next).any()):
-                print(f"Stopping rollout early at step {i} due to non-finite values")
-                break
+        # Materialize arrays and append
+        u_np = u_next.detach().cpu().numpy()
+        v_np = v_next.detach().cpu().numpy()
+        p_np = p_next.detach().cpu().numpy()
+        step_out = base_step + i
+        _append_rollout_step(out_csv_path, step_out, xs, ys, p_np, u_np, v_np)
 
-            # Materialize arrays for writing
-            u_np = u_next.detach().cpu().numpy()
-            v_np = v_next.detach().cpu().numpy()
-            p_np = p_next.detach().cpu().numpy()
-            vn_np = np.hypot(u_np, v_np)
-
-            step_out = base_step + i
-            for nid, xi, yi, pi, ui, vi, vni in zip(node_ids, xs, ys, p_np, u_np, v_np, vn_np):
-                w.writerow([int(step_out), int(nid), float(xi), float(yi), float(pi), float(ui), float(vi), float(vni)])
-
-            # Advance state
-            u_cur = u_next
-            v_cur = v_next
-            p_cur = p_next
+        # Advance state
+        u_cur = u_next
+        v_cur = v_next
+        p_cur = p_next
 
     print(f"Bootstrap rollout written to: {out_csv_path}")
     return str(out_csv_path)
