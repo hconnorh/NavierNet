@@ -27,8 +27,8 @@ build/
 # PyFR simulation outputs
 sims/
 results/
-*.pyfrm
-*.msh
+# *.pyfrm
+# *.msh
 
 
 # Misc
