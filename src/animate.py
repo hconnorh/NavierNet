@@ -11,8 +11,8 @@ from PIL import Image
 
 from plots import plot_compare
 
-
 ROOT = Path(__file__).resolve().parent.parent
+
 
 def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis", off_screen=True, window_size=(1920, 1080)):
     """
@@ -29,11 +29,11 @@ def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis", 
 
     sim_dir = ROOT / "sims" / sim_name
     vtu_dir = sim_dir / "pyfr_results" / case_name
-    anim_dir = sim_dir / "animations"
+    anim_dir = sim_dir / "animations" / "sim_plots"
     anim_dir.mkdir(parents=True, exist_ok=True)
 
     scalar_name = "Velocity" # Vector field to plot Euclidean norm of
-    output_mp4 = anim_dir.parent / f"{sim_name}-{case_name}.mp4"
+    output_mp4 = anim_dir.parent / f"sim-results-{sim_name}-{case_name}.mp4"
 
 
     # Load all VTU files
