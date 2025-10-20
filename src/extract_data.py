@@ -6,9 +6,12 @@ from typing import Dict, List, Tuple
 from tqdm import tqdm
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+
+
 """
 Module: extract_training_data.py
-Package: NS2D-Surrogate
+Package: NavierNet
 Author: @hconnorh
 Description:
 
@@ -17,17 +20,13 @@ time-series from PyFR simulation result files (.vtu). These utilities
 support building ML-ready CSV datasets from time-dependent simulation outputs.
 
 Features:
-- Facilitates robust extraction of simulation fields suitable for machine 
-  learning workflows.
+- Facilitates extraction of simulation fields suitable for ml workflows.
 - Loads VTU files and converts mesh cell data to point data if necessary.
 - Extracts nodal pressure and velocity components for each timestep.
 - Maps node coordinates to index and manages consistency across different mesh 
   layouts.
-
-Date: 09-May-2023
-Modified: 17-Sep-2025
 """
-ROOT = Path(__file__).resolve().parent.parent
+
 
 def _as_point_data(mesh: "pv.DataSet") -> "pv.DataSet":
 	"""If there is no point data but there is cell data, convert"""
@@ -80,16 +79,6 @@ def _get_velocity_components(mesh: "pv.DataSet") -> Tuple[np.ndarray, np.ndarray
 	# Return x and y components
 	return vec[:, 0].ravel(), vec[:, 1].ravel()
 
-
-def _build_reference_index(points_xy: np.ndarray) -> Dict[Tuple[float, float], int]:
-	"""Use rounding to stabilise float keys"""
-	keys = [(
-		float(round(x, 12)),
-		float(round(y, 12))
-	) for x, y in points_xy]
-	return {k: i for i, k in enumerate(keys)}
-
-
 def _build_unique_reference(points_xy: np.ndarray, decimals: int = 12) -> Tuple[np.ndarray, Dict[Tuple[float, float], int]]:
 	"""
 	Create a unique (x, y) list by rounding coordinates and mapping each rounded
@@ -103,7 +92,6 @@ def _build_unique_reference(points_xy: np.ndarray, decimals: int = 12) -> Tuple[
 			ref_map[k] = len(unique_points)
 			unique_points.append((float(x), float(y)))
 	return np.asarray(unique_points, dtype=float), ref_map
-
 
 def _aggregate_fields_to_unique(
 	ref_map: Dict[Tuple[float, float], int],
@@ -155,7 +143,8 @@ def _aggregate_fields_to_unique(
 
 	if np.any(acc_c == 0):
 		missing = int(np.count_nonzero(acc_c == 0))
-		raise SystemExit(f"Aggregation failure: {missing} reference nodes had no matches in current step")
+		raise SystemExit(f"Aggregation failure: {missing} reference nodes had"
+		                 f"no matches in current step")
 
 	p_out = acc_p / acc_c
 	u_out = acc_u / acc_c
@@ -169,10 +158,11 @@ def _aggregate_fields_to_unique(
 	n_exceed = int(np.count_nonzero((spread_p > tol) | (spread_u > tol) | (spread_v > tol)))
 	if n_exceed > 0:
 		#TODO: Need to check tolerances
-		print(f"Warning: {n_exceed} nodes had duplicate values differing by > {tol}:  [p {spread_p.max()}], [u {spread_u.max()}], [v {spread_v.max()}]")
+		print(f"Warning: {n_exceed} nodes had duplicate values differing" 
+		      f"by > {tol}:  [p {spread_p.max()}], [u {spread_u.max()}],"
+			  f"[v {spread_v.max()}]")
 
 	return p_out, u_out, v_out, vn_out
-
 
 def extract_csv(sim_name: str, case_name: str, return_df: bool=True) -> None:
 	"""
@@ -187,7 +177,7 @@ def extract_csv(sim_name: str, case_name: str, return_df: bool=True) -> None:
 	# Pathing (use ROOT for robust absolute paths)
 	sim_dir = ROOT / "sims" / sim_name
 	vtu_dir = sim_dir / "pyfr_results" / case_name
-	out_dir = sim_dir / "training_data"
+	out_dir = sim_dir / "ml_training"
 	results = out_dir / f"{case_name}-results.csv"
 	key_inputs = out_dir / f"{case_name}-inputs.csv"
 
@@ -210,7 +200,23 @@ def extract_csv(sim_name: str, case_name: str, return_df: bool=True) -> None:
 	# Prepare output buffer: rows = num_steps * num_nodes, cols = 7 (step, n_x, n_y, p, u, v, vn)
 	num_steps = len(vtus)
 	num_nodes = ref_xy.shape[0]
-	out_arr = np.empty((num_steps * num_nodes, 7), dtype=float)
+
+	# Write a stable node map once per case to ensure consistent IDs across datasets
+	node_map_path = out_dir / f"{case_name}-node_map.csv"
+	node_ids_arr = np.arange(num_nodes, dtype=float)
+	node_map_arr = np.column_stack([node_ids_arr, ref_xy[:, 0], ref_xy[:, 1]])
+	# Columns: node_id (int-like), n_x, n_y
+	np.savetxt(
+		node_map_path,
+		node_map_arr,
+		delimiter=",",
+		fmt="%.16g",
+		header=",".join(["node_id", "n_x", "n_y"]),
+		comments="",
+	)
+
+	# Prepare output buffer: rows = num_steps * num_nodes, cols = 8 (step, node_id, n_x, n_y, p, u, v, vn)
+	out_arr = np.empty((num_steps * num_nodes, 8), dtype=float)
 
 	# Process each timestep and fill output buffer
 	for step, vtu_path in tqdm(list(enumerate(vtus))):
@@ -229,9 +235,10 @@ def extract_csv(sim_name: str, case_name: str, return_df: bool=True) -> None:
 			ref_map, xy, p_arr, u_arr, v_arr, decimals=12,
 		)
 
-		# Build block for this timestep: [step, n_x, n_y, p, u, v, vn]
+		# Build block for this timestep: [step, node_id, n_x, n_y, p, u, v, vn]
 		block = np.column_stack([
 			np.full(num_nodes, step, dtype=float),
+			node_ids_arr,
 			ref_xy[:, 0],
 			ref_xy[:, 1],
 			p_arr,
@@ -251,14 +258,15 @@ def extract_csv(sim_name: str, case_name: str, return_df: bool=True) -> None:
 		out_arr,
 		delimiter=",",
 		fmt="%.16g",
-		header=",".join(["step", "n_x", "n_y", "p", "u", "v", "vn"]),
+		header=",".join(["step", "node_id", "n_x", "n_y", "p", "u", "v", "vn"]),
 		comments="",
 	)
 
 	print(f"Wrote combined CSV: {results}")
+	print(f"Wrote node map CSV: {node_map_path}")
 
 	if return_df:
-		cols = ["step", "n_x", "n_y", "p", "u", "v", "vn"]
+		cols = ["step", "node_id", "n_x", "n_y", "p", "u", "v", "vn"]
 		return pl.DataFrame({col: out_arr[:, i] for i, col in enumerate(cols)})
 
 def extract_all_cases(sim_name: str) -> None:

@@ -2,6 +2,7 @@ import os
 import json
 import torch
 import numpy as np
+import pandas as pd
 
 from typing import Dict, Tuple, List
 from pathlib import Path
@@ -10,15 +11,82 @@ from tqdm import tqdm
 ROOT = Path(__file__).resolve().parent.parent
 
 
+"""
+Module: ml.py
+Package: NavierNet
+Author: @hconnorh
+Description:
+
+High-level training pipeline for a graph-based surrogate of fluid dynamics. It
+defines a compact message‑passing neural network to evolve nodal states on a
+mesh, utilities to load graph topology and time‑series fields and a training
+routine that learns per‑node state deltas while enforcing physics‑motivated
+regularisation (e.g., divergence and boundary consistency).
+
+Running this file trains the surrogate for a chosen simulation case with 
+configurable hyperparameters.
+"""
+
+
 # === GENERAL UTILS ===
 
-def _get_device() -> torch.device:
+def get_device() -> torch.device:
     """Returns the best available torch device (MPS, CUDA, or CPU)"""
     if torch.backends.mps.is_available():
         return torch.device("mps")
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
+
+def calculate_residuals(df_sim, df_ml):
+    """
+    Calculate absolute percentage residuals between simulation (truth) and ML 
+    predictions for each node and each step.
+
+    This function compares the predicted values from surrogate model 
+    (df_ml) with ground-truth simulation results (df_sim). It merges the two 
+    DataFrames on ['step','node_id'], aligns nodal coordinates 
+    (rounded to 12 decimals for uniqueness), and computes the absolute 
+    percentage residuals for each field: pressure (p), velocity components 
+    (u, v), and normal velocity (vn).
+
+    Args:
+        df_sim (pd.DataFrame): df containing simulation (ground truth) results.
+                               Must contain columns ['step', 'node_id', 'n_x', 
+                               'n_y', 'p', 'u', 'v', 'vn'] 
+        df_ml  (pd.DataFrame): df containing ML predictions with the same 
+                               structure as df_sim.
+
+    Returns:
+        pd.DataFrame: df where p, u, v, vn are the absolute pct residuals, i.e.
+                      |prediction - truth| / |truth| for each field.
+    """
+    # Round to match extractor's 12-decimal uniqueness
+    df_sim[['n_x','n_y']] = df_sim[['n_x','n_y']].round(12)
+    df_ml[['n_x','n_y']]  = df_ml[['n_x','n_y']].round(12)
+
+    # Merge on node_id
+    pd.merge(
+        df_sim, df_ml, on=['step','node_id'], how='inner', validate='one_to_one'
+    )
+
+    df_tmp = pd.merge(
+        df_sim, df_ml, on=['step','node_id'], suffixes=('_true','_pred'), how='inner'
+    )
+
+    df_res = pd.DataFrame({
+        'node_id': df_tmp['node_id'],
+        'n_x': df_tmp['n_x_true'],
+        'n_y': df_tmp['n_y_true'],
+        'p': ((df_tmp['p_pred'] - df_tmp['p_true'])/df_tmp['p_true']).abs(),
+        'u': ((df_tmp['u_pred'] - df_tmp['u_true'])/df_tmp['u_true']).abs(),
+        'v': ((df_tmp['v_pred'] - df_tmp['v_true'])/df_tmp['v_true']).abs(),
+        'vn': ((df_tmp['vn_pred'] - df_tmp['vn_true'])/df_tmp['vn_true']).abs(),
+        'step': df_tmp['step']
+    })
+
+    return df_res
+
 
 
 # === ML CLASSES ===
@@ -245,7 +313,7 @@ def load_graph_data(sim_name: str, case_name: str) -> Dict[str, np.ndarray]:
     """
     Load graph data from the training data directory.
     """
-    base_dir = ROOT / "sims" / sim_name / "training_data" / "graph" / case_name
+    base_dir = ROOT / "sims" / sim_name / "ml_training" / "graph" / case_name
     graph_npz = base_dir / "graph.npz"
     ts_npz = base_dir / "timeseries.npz"
     meta_json = base_dir / "meta.json"
@@ -357,7 +425,7 @@ def train_model(sim_name: str, case_name: str, epochs: int = 5,
     train_steps = all_steps[:-num_val] if all_steps.shape[0] > 1 else all_steps
     val_steps = all_steps[-num_val:] if all_steps.shape[0] > 1 else all_steps
 
-    device = _get_device()
+    device = get_device()
     edge_index = edge_index.to(device)
     edge_attr = edge_attr.to(device)
     static_feats = static_feats.to(device)
@@ -480,7 +548,7 @@ def train_model(sim_name: str, case_name: str, epochs: int = 5,
         })
 
     # Save model
-    out_dir = ROOT / "sims" / sim_name / "training_data" / "graph" / case_name
+    out_dir = ROOT / "sims" / sim_name / "ml_training" / "graph" / case_name
     out_dir.mkdir(parents=True, exist_ok=True)
     model_path = out_dir / "model_graphsage.pt"
     torch.save({

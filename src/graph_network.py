@@ -9,9 +9,25 @@ import polars as pl
 from typing import Dict, Tuple, List, Optional
 from pathlib import Path
 
-from extract_training_data import _as_point_data
+from extract_data import _as_point_data
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+"""
+Module: graph_network.py
+Package: NavierNet
+Author: @hconnorh
+Description:
+
+Builds the nodal graph used by the surrogate model. Starting from a predefined 
+mesh, each mesh node becomes a graph node updated by a single, weight-shared 
+neural network. At inference time, each node aggregates information from its 
+neighbors to predict next-step pressure and velocity. This script derives the 
+neighborhood (graph connectivity) from the mesh and prepares the node/edge 
+artifacts for training and deployment.
+"""
+
 
 COORD_DECIMALS_PRIMARY = 8
 COORD_DECIMALS_FALLBACK_1 = 6
@@ -205,7 +221,7 @@ def _align_csv_timeseries(sim_name: str, case_name: str, ref_map: Dict[Tuple[flo
       - steps: (T_kept,)
       - U, V, P: (T_kept, N)
     """
-    td_dir = ROOT / "sims" / sim_name / "training_data"
+    td_dir = ROOT / "sims" / sim_name / "ml_training"
     results_csv = td_dir / f"{case_name}-results.csv"
     if not results_csv.exists():
         matches = sorted(td_dir.glob("*-results.csv"))
@@ -285,7 +301,7 @@ def build_graph(sim_name: str, case_name: Optional[str] = None) -> str:
     Build a static graph from the first .vtu of a case and align CSV fields
     across timesteps to the node ordering.
 
-    Saves artifacts under `sims/<sim_name>/training_data/graph/<case_name>/`:
+    Saves artifacts under `sims/<sim_name>/ml_training/graph/<case_name>/`:
       - graph.npz: node_x, node_y, node_flags, edge_index, edge_attr
       - timeseries.npz: steps, U, V, P, dU, dV, dP
       - meta.json: basic metadata
@@ -307,7 +323,7 @@ def build_graph(sim_name: str, case_name: Optional[str] = None) -> str:
 
     print(f"Building node ordering from CSV for {case_name}")
     # Build node ordering from CSV (canonical for features/targets), then map mesh entities to it
-    td_dir = os.path.join(sim_dir, "training_data")
+    td_dir = os.path.join(sim_dir, "ml_training")
     results_csv = os.path.join(td_dir, f"{case_name}-results.csv")
     if not os.path.isfile(results_csv):
         matches = sorted(glob.glob(os.path.join(td_dir, "*-results.csv")))
@@ -335,7 +351,7 @@ def build_graph(sim_name: str, case_name: Optional[str] = None) -> str:
 
     print(f"Saving artifacts for {case_name}")
     # Persist
-    out_dir = os.path.join(sim_dir, "training_data", "graph", case_name)
+    out_dir = os.path.join(sim_dir, "ml_training", "graph", case_name)
     os.makedirs(out_dir, exist_ok=True)
 
     np.savez_compressed(
