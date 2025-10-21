@@ -116,12 +116,12 @@ def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis",
             scalar_bar_args=dict(
                 title="",
                 vertical=True,
-                position_x=0.75,  
+                position_x=0.77,  
                 position_y=0.315,
                 height=0.36,      
                 width=0.05,
-                label_font_size=12,      # Make colorbar tick/value labels smaller
-                title_font_size=12,
+                label_font_size=14,      # Make colorbar tick/value labels smaller
+                title_font_size=14,
                 n_labels=5,             # Fewer labels for clarity (optional)
             ),
         )
@@ -133,7 +133,7 @@ def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis",
 
         # Leave a small right margin for the colorbar
         try:
-            plotter.renderer.SetViewport(0.0, 0.0, 0, 1.0)
+            plotter.renderer.SetViewport(0.0, 0.0, 1.0, 1.0)
         except Exception:
             pass
         
