@@ -72,7 +72,6 @@ def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis",
     scalar_name = "Velocity" # Vector field to plot Euclidean norm of
     output_mp4 = anim_dir.parent / f"sim-results-{sim_name}-{case_name}.mp4"
 
-
     # Load all VTU files
     vtu_files = sorted(glob.glob(os.path.join(vtu_dir, "inc-cylinder_*.vtu")))
     if not vtu_files:
@@ -98,6 +97,8 @@ def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis",
 
     # Prepare plotter
     plotter = pv.Plotter(off_screen=off_screen, window_size=window_size)
+    # Use a clean background and ensure the render area fills the window
+    plotter.set_background('white')
     mpl_cmap = MPL_CMAP_MAP.get(cmap, cmap)
     
     # Render each timestep
@@ -107,14 +108,34 @@ def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis",
         # Add mesh with scalar coloring
         plotter.add_mesh(
             grid,
-            scalars=scalar_name,
+            scalars="Velocity_mag",  # color by computed magnitude
             cmap=mpl_cmap,
             show_edges=False,
             clim=(global_min, global_max),
+            show_scalar_bar=True,
+            scalar_bar_args=dict(
+                title="",
+                vertical=True,
+                position_x=0.75,  
+                position_y=0.315,
+                height=0.36,      
+                width=0.05,
+                label_font_size=12,      # Make colorbar tick/value labels smaller
+                title_font_size=12,
+                n_labels=5,             # Fewer labels for clarity (optional)
+            ),
         )
         
-        # Optional: adjust camera (example: top view)
-        plotter.camera_position = 'xy'
+        # Orient and fit camera so content fills the window and zoom in
+        plotter.view_xy()
+        plotter.enable_parallel_projection()
+        plotter.reset_camera()
+
+        # Leave a small right margin for the colorbar
+        try:
+            plotter.renderer.SetViewport(0.0, 0.0, 0, 1.0)
+        except Exception:
+            pass
         
         # Render offscreen and save as image
         img_path = anim_dir / f"frame_{i:04d}.png"
