@@ -28,6 +28,7 @@ dependencies = [
 dev = [
     "ipykernel>=6.30.1",
     "plotly>=6.3.1",
+    "scikit-learn[cluster]>=1.7.2",
 ]
 
 [tool.setuptools]

@@ -8,8 +8,9 @@ import re
 from pathlib import Path
 from tqdm import tqdm
 from PIL import Image
+from matplotlib.colors import LinearSegmentedColormap
 
-from plots import plot_compare
+from plots import plot_compare, CMAP
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -18,10 +19,33 @@ ROOT = Path(__file__).resolve().parent.parent
 Module: animate.py
 Package: NavierNet
 Author: @hconnorh
-
-Description: Provides utility functions for turning png plots and vtu files 
-             into animations.
+Description: Utilities for generating animations of the simulation results.
 """
+
+
+ELECTRIC_COLORMAP_MPL = LinearSegmentedColormap.from_list(
+    "electric",
+    [
+        (0.0, (0.0/255.0, 0.0/255.0, 0.0/255.0)),  # black
+        (0.37695419864113106, (2.0/255.0, 16.0/255.0, 83.0/255.0)),
+        (0.559445018580004, (9.0/255.0, 59.0/255.0, 157.0/255.0)),
+        (0.7490160293761956, (22.0/255.0, 115.0/255.0, 221.0/255.0)),
+        (0.9068800985070032, (73.0/255.0, 174.0/255.0, 243.0/255.0)),
+        (1.0, (255.0/255.0, 255.0/255.0, 255.0/255.0)),  # white
+    ],
+    N=256,
+)
+ELECTRIC_COLORMAP_MPL_R = ELECTRIC_COLORMAP_MPL.reversed()
+
+MPL_CMAP_MAP = {
+    "electric": ELECTRIC_COLORMAP_MPL,
+    "electric_r": ELECTRIC_COLORMAP_MPL_R,
+    "turbo": "turbo",
+    "viridis": "viridis",
+    # Grayscale with low=white, high=black
+    "greys": "Greys",
+    "gray_r": "gray_r",
+}
 
 
 def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis", 
@@ -74,6 +98,7 @@ def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis",
 
     # Prepare plotter
     plotter = pv.Plotter(off_screen=off_screen, window_size=window_size)
+    mpl_cmap = MPL_CMAP_MAP.get(cmap, cmap)
     
     # Render each timestep
     frames = []
@@ -83,7 +108,7 @@ def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis",
         plotter.add_mesh(
             grid,
             scalars=scalar_name,
-            cmap=cmap,
+            cmap=mpl_cmap,
             show_edges=False,
             clim=(global_min, global_max),
         )

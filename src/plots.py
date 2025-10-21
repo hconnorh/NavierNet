@@ -11,26 +11,19 @@ import plotly.express as px
 Module: plot_static_results.py
 Package: NavierNet
 Author: @hconnorh
-Description:
+Description: 
 
-This script provides utility plotting functionality for static visualisation of
-simulated nodal fields (e.g., pressure, velocity) from PyFR-generated training 
-data CSVs.
-
-It is used to generate static x/y scatter plots colorized by nodal property, 
-for a specified timestep, case, and simulation. Intended for analysis and 
-verification of simulation results.
+Utilities for plotting results from both CFD and surrogate simulation.
 
 Key Features:
     - Loads case-specific extracted CSV files from a simulation folder
-    - Visualises fields (pressure, velocity components, etc.) over the mesh
-    - Presents plots using Plotly web/webgl for large datasets
+    - Visualises fields (pressure, velocity components, etc.) over nodes
 """
 
 
 # Best with VS-CODE Monokai Pro theme
 VS_PALLET = {
-    'blue'   :  '#4C55B7',
+    'blue'   : '#4C55B7',
     'red'    : '#AD4332',
     'green'  : '#079671',
     'purple' : '#7E4DB7',
@@ -46,6 +39,23 @@ VS_PALLET = {
     'vs-grey-light': 'HSL(300,2,34)',
 }
 
+ELECTRIC_COLORSCALE = [
+    [0.0, 'rgb(0, 0, 0)'],  # black
+    [0.37695419864113106, 'rgb(2, 16, 83)'], 
+    [0.559445018580004, 'rgb(9, 59, 157)'], 
+    [0.7490160293761956, 'rgb(22, 115, 221)'], 
+    [0.9068800985070032, 'rgb(73, 174, 243)'], 
+    [1.0, 'rgb(255, 255, 255)']  # white
+]
+
+ELECTRIC_COLORSCALE_R = [[1.0 - p, c] for p, c in ELECTRIC_COLORSCALE[::-1]]
+
+CMAP = {
+	"electric": ELECTRIC_COLORSCALE,
+	"electric_r": ELECTRIC_COLORSCALE_R,
+	"turbo": "Turbo",
+	"viridis": "Viridis",
+}
 
 def _ensure_pandas_sorted(df):
 	"""Internal helper: accept Polars or Pandas and sort by epoch ascending."""
@@ -56,7 +66,7 @@ def _ensure_pandas_sorted(df):
 
 
 def plot_column(df: str, col: str, step: int | None = None, title: str = None,
-			    theme: str ="Turbo") -> None:
+			    theme: str ="turbo", type="scatter") -> None:
 	"""
     Scatter plot x/y colored by the requested column at a given step
 	.
@@ -105,7 +115,7 @@ def plot_column(df: str, col: str, step: int | None = None, title: str = None,
 		x=x,
 		y=y,
 		color=color_vals,
-		color_continuous_scale=theme,
+		color_continuous_scale=CMAP[theme],
 		render_mode="webgl",
 		labels={"color": col},
 		title=title,
@@ -356,7 +366,7 @@ def plot_training_gap(df):
 	return fig
 
 
-def plot_compare(df_sim, df_ml, df_res, metric, step):
+def plot_compare(df_sim, df_ml, df_res, metric, step, cmap="turbo"):
 	"""
 	Plot comparison of simulation, surrogate, and residual predictions for a
 	single timestep in a 3-row layout with a shared Turbo colorscale.
@@ -458,15 +468,15 @@ def plot_compare(df_sim, df_ml, df_res, metric, step):
 		
 		# Individual coloraxes
 		coloraxis=dict(
-			colorscale="Turbo", showscale=True, cmin=cmin_s, cmax=cmax_s,
+			colorscale=CMAP[cmap], showscale=True, cmin=cmin_s, cmax=cmax_s,
 			colorbar=dict(y=(ydom1[0]+ydom1[1])/2.0, yanchor="middle", len=ydom1[1]-ydom1[0])
 		),
 		coloraxis2=dict(
-			colorscale="Turbo", showscale=True, cmin=cmin_m, cmax=cmax_m,
+			colorscale=CMAP[cmap], showscale=True, cmin=cmin_m, cmax=cmax_m,
 			colorbar=dict(y=(ydom2[0]+ydom2[1])/2.0, yanchor="middle", len=ydom2[1]-ydom2[0])
 		),
 		coloraxis3=dict(
-			colorscale="Turbo", showscale=True, cmin=cmin_r, cmax=cmax_r,
+			colorscale=CMAP[cmap], showscale=True, cmin=cmin_r, cmax=cmax_r,
 			colorbar=dict(y=(ydom3[0]+ydom3[1])/2.0, yanchor="middle", len=ydom3[1]-ydom3[0])
 		),
 	)
