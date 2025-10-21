@@ -201,6 +201,7 @@ def _append_rollout_step(out_csv_path: Path, step_out: int,
         for nid, xi, yi, pi, ui, vi, vni in zip(node_ids, xs, ys, p, u, v, vn):
             w.writerow([int(step_out), int(nid), float(xi), float(yi), float(pi), float(ui), float(vi), float(vni)])
 
+@torch.inference_mode()
 def bootstrap_simulation(sim_name: str, case_name: str | None = None,
                          steps: int = 200, start_step: int = 0,
                          out_csv: str | None = None, overwrite: bool = True) -> str:
@@ -301,10 +302,18 @@ def bootstrap_simulation(sim_name: str, case_name: str | None = None,
         step_out = base_step + i
         _append_rollout_step(out_csv_path, step_out, xs, ys, p_np, u_np, v_np)
 
+        # Periodically free cached memory on MPS to mitigate fragmentation
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+
         # Advance state
         u_cur = u_next
         v_cur = v_next
         p_cur = p_next
+
+    # Final cache cleanup on MPS
+    if torch.backends.mps.is_available():
+        torch.mps.empty_cache()
 
     print(f"Bootstrap rollout written to: {out_csv_path}")
     return str(out_csv_path)
