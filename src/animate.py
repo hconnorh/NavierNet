@@ -266,7 +266,8 @@ def png_to_mp4(img_dir, output_mp4, fps=20, window_size=(1920, 1080)):
 
 def animate_residuals(df_sim, df_ml, df_res, sim_name: str, 
                       dir_name: str = 'residuals', fps: int = 20, 
-                      window_size: tuple[int, int] = (1920, 1080)):
+                      window_size: tuple[int, int] = (900, 1260), 
+                      plot_type: str = "contour"):
 
     img_dir = ROOT / "sims" / sim_name / "animations" / f"{dir_name}"
     img_dir.mkdir(parents=True, exist_ok=True)
@@ -275,7 +276,8 @@ def animate_residuals(df_sim, df_ml, df_res, sim_name: str,
     step = df_sim['step'].max()
     start_step = 1
     for s in tqdm(range(start_step, step)):
-        fig = plot_compare(df_sim, df_ml, df_res, metric="p", step=s)
+        fig = plot_compare(df_sim, df_ml, df_res, metric="p", step=s,
+                                                  plot_type=plot_type)
         # fig.write_html(f"compare_{s}.html")
         fig.write_image(f"{img_dir}/compare_step{s}.png")
     

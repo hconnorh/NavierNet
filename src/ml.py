@@ -17,11 +17,12 @@ Package: NavierNet
 Author: @hconnorh
 Description:
 
-High-level training pipeline for a graph-based surrogate of fluid dynamics. It
-defines a compact message‑passing neural network to evolve nodal states on a
-mesh, utilities to load graph topology and time‑series fields and a training
-routine that learns per‑node state deltas while enforcing physics‑motivated
-regularisation (e.g., divergence and boundary consistency).
+High-level training pipeline for a graph-based Physics-Informed Neural Network 
+(PINN) trained on Navier-Stokes simulation results. It defines a compact 
+message‑passing neural network to evolve nodal states on a mesh, utilities to 
+load graph topology and time‑series fields and a training routine that learns 
+per‑node state deltas while enforcing physics‑motivated regularisation (e.g., 
+divergence and boundary consistency).
 
 Running this file trains the surrogate for a chosen simulation case with 
 configurable hyperparameters.

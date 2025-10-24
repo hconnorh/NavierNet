@@ -198,8 +198,8 @@ class PyfrSimulation:
         FileNotFoundError: If input files are missing.
         subprocess.CalledProcessError: If the simulation fails.
         """
-        # GPU or CPU backend
-        backend = backend or os.environ.get("PYFR_BACKEND", "openmp")
+        # GPU or CPU backend; default to Metal on Apple Silicon
+        backend = backend or os.environ.get("PYFR_BACKEND", "metal")
 
         # Create results directory if it doesn't exist
         results_dir = results_dir or "results"
@@ -238,7 +238,8 @@ class PyfrSimulation:
 
         # Run all cases into separate result subdirs
         print(f"Running {len(perms)} simulations...")
-        for c in tqdm(range(len(perms))):
+        pbar = tqdm(range(len(perms))) if not show_progress else range(len(perms))
+        for c in pbar:
             ini_file = os.path.join(self.sim_config_dir, f"case{c}.ini")
             results_dir = os.path.join(self.sim_results_dir, f"case{c}")
             try:
@@ -248,16 +249,15 @@ class PyfrSimulation:
                 continue
 
 if __name__ == "__main__":
-    sim_name = "2d-cylinder-1s"
+    sim_name = "example-model4"
     perms = [
-    [
-        0.005,  # [nu, m/s^2] Kintematic velocity 
-        1,      # [Uin, m/s]  Inlet velocity 
-        0.05,   # [dt, s]     Time step
-        10,     # [tend, s]   Simulation total time
-        5       # [dt-out, s] Save state
-    ],
-
+        [
+            0.01,     # [nu, m/s^2] Kintematic velocity 
+            2.0,       # [Uin, m/s]  Inlet velocity 
+            0.05,      # [dt, s]     Time step
+            60.0,      # [tend, s]   Simulation total time
+            0.05,       # [dt-out, s] Save state # Sh
+        ],
     ]
     m = PyfrSimulation(sim_name)
     m.run_bulk(perms, backend="metal", show_progress=True)

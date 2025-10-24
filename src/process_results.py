@@ -16,12 +16,13 @@ Package: NavierNet
 Author: @hconnorh
 Description: 
 
-This file provides utility functions for handling simulation data files. It 
-includes:
+Utilities for handling simulation data files. 
+
+Features:
 	- Finding mesh files (.pyfrm) in a simulation's config directory.
 	- Writing .pvd files to describe time series of VTU files.
-	- Converting simulation result files (.pyfrs) to .VTU format and generating 
-      extracting nodal results.
+	- Converting simulation result files (.pyfrs) to .VTU format and 
+      extracting nodal results for ML training.
 """
 
 

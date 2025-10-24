@@ -446,7 +446,7 @@ def plot_training_gap(df):
 	return fig
 
 
-def plot_compare(df_sim, df_ml, df_res, metric, step, cmap="turbo"):
+def plot_compare(df_sim, df_ml, df_res, metric, step, cmap="turbo", plot_type="scatter"):
 	"""
 	Plot comparison of simulation, surrogate, and residual predictions for a
 	single timestep in a 3-row layout with a shared Turbo colorscale.
@@ -457,7 +457,8 @@ def plot_compare(df_sim, df_ml, df_res, metric, step, cmap="turbo"):
 		df_res: DataFrame (pandas or polars) of residual rows
 		metric (str): column to color by (e.g., "p", "u", "v", "vn")
 		step (int): timestep to visualize
-
+		cmap (str): color map to use (e.g., "turbo", "viridis", "electric", "electric_r")
+		plot_type (str): "scatter" to show nodes, or "contour" to show filled contours.
 	Returns:
 		plotly.graph_objects.Figure
 	"""
@@ -501,6 +502,8 @@ def plot_compare(df_sim, df_ml, df_res, metric, step, cmap="turbo"):
 			lo -= 1.0; hi += 1.0
 		return lo, hi
 
+	# Constrain color range 
+	# NOTE: Currently disabled, can loose resolution across time.
 	cmin_s, cmax_s = _range_for(ds[metric].to_numpy().astype(float))
 	cmin_m, cmax_m = _range_for(dm[metric].to_numpy().astype(float))
 	cmin_r, cmax_r = _range_for(dr[metric].to_numpy().astype(float))
@@ -508,22 +511,85 @@ def plot_compare(df_sim, df_ml, df_res, metric, step, cmap="turbo"):
 	# Build subplot canvas
 	fig = make_subplots(
 		rows=3, cols=1, vertical_spacing=0.07,
-		subplot_titles=["Truth (Sim)", "ML (Prediction)", "Residual (Pct Rel Error)"]
+		subplot_titles=["Truth (Sim)", "ML (Prediction)", "Residual (Abs Error)"]
 	)
 
 	def add_panel(dfp, rowi, axis_key: str):
-		fig.add_trace(
-			go.Scattergl(
-				x=dfp["n_x"], y=dfp["n_y"], mode="markers",
-				marker=dict(
-					size=4,
-					color=dfp[metric].to_numpy(),
-					coloraxis=axis_key,
+		if plot_type == "scatter":
+			fig.add_trace(
+				go.Scattergl(
+					x=dfp["n_x"], y=dfp["n_y"], mode="markers",
+					marker=dict(
+						size=4,
+						color=dfp[metric].to_numpy(),
+						coloraxis=axis_key,
+					),
+					showlegend=False,
 				),
-				showlegend=False,
-			),
-			row=rowi, col=1,
-		)
+				row=rowi, col=1,
+			)
+		elif plot_type == "contour":
+			# Contour: bin to a regular grid and lightly fill gaps for smoother fields
+			def _grid_bin(df_local):
+				xv = df_local["n_x"].to_numpy()
+				yv = df_local["n_y"].to_numpy()
+				zv = df_local[metric].to_numpy().astype(float)
+				xspan = float(xmax - xmin)
+				yspan = float(ymax - ymin)
+				Nx = 64
+				Ny = max(64, int(round(Nx * (yspan / xspan)))) if xspan > 0 else Nx
+				xedges = np.linspace(xmin, xmax, Nx + 1)
+				yedges = np.linspace(ymin, ymax, Ny + 1)
+				xcenters = 0.5 * (xedges[:-1] + xedges[1:])
+				ycenters = 0.5 * (yedges[:-1] + yedges[1:])
+				ix = np.clip(np.searchsorted(xedges, xv, side='right') - 1, 0, Nx - 1)
+				iy = np.clip(np.searchsorted(yedges, yv, side='right') - 1, 0, Ny - 1)
+				sum_grid = np.zeros((Ny, Nx), dtype=float)
+				cnt_grid = np.zeros((Ny, Nx), dtype=np.int64)
+				np.add.at(sum_grid, (iy, ix), zv)
+				np.add.at(cnt_grid, (iy, ix), 1)
+				zgrid = np.divide(sum_grid, cnt_grid, out=np.full_like(sum_grid, np.nan, dtype=float), where=cnt_grid > 0)
+				# Fill NaNs from neighbors (up to 3 iterations)
+				filled = zgrid.copy()
+				for _ in range(3):
+					mask_nan = np.isnan(filled)
+					if not np.any(mask_nan):
+						break
+					sums = np.zeros_like(filled, dtype=float)
+					counts = np.zeros_like(filled, dtype=np.int64)
+					for dy in (-1, 0, 1):
+						for dx in (-1, 0, 1):
+							if dy == 0 and dx == 0:
+								continue
+							y_src = slice(max(0, -dy), filled.shape[0] - max(0, dy))
+							x_src = slice(max(0, -dx), filled.shape[1] - max(0, dx))
+							y_dst = slice(max(0, dy), filled.shape[0] - max(0, -dy))
+							x_dst = slice(max(0, dx), filled.shape[1] - max(0, -dx))
+							nei = filled[y_src, x_src]
+							m = ~np.isnan(nei)
+							sums[y_dst, x_dst] += np.where(m, nei, 0.0)
+							counts[y_dst, x_dst] += m.astype(np.int64)
+					with np.errstate(invalid='ignore'):
+						means = sums / counts
+						fillable = mask_nan & (counts > 0)
+						filled[fillable] = means[fillable]
+				return xcenters, ycenters, filled
+
+			xc, yc, zg = _grid_bin(dfp)
+			fig.add_trace(
+				go.Contour(
+					x=xc,
+					y=yc,
+					z=zg,
+					coloraxis=axis_key,
+					ncontours=25,
+					connectgaps=True,
+					showscale=False,
+				),
+				row=rowi, col=1,
+			)
+		else:
+			raise ValueError("plot_type must be either 'scatter' or 'contour'")
 		# Tight and equal-aspect axes for this row
 		fig.update_xaxes(range=[xmin, xmax], row=rowi, col=1)
 		fig.update_yaxes(range=[ymin, ymax], scaleanchor=f"x{rowi}", scaleratio=1, row=rowi, col=1)
@@ -540,7 +606,7 @@ def plot_compare(df_sim, df_ml, df_res, metric, step, cmap="turbo"):
 	ydom3 = fig.layout.yaxis3.domain
 
 	fig.update_layout(
-		title=f"Nodal Residual Analysis | Step {step}",
+		title=f"Nodal Residual Analysis ({metric}) | Step {step}",
 		width=900,
 		height=900*1.4,
 		showlegend=False,
@@ -548,15 +614,15 @@ def plot_compare(df_sim, df_ml, df_res, metric, step, cmap="turbo"):
 		
 		# Individual coloraxes
 		coloraxis=dict(
-			colorscale=CMAP[cmap], showscale=True, cmin=cmin_s, cmax=cmax_s,
+			colorscale=CMAP[cmap], showscale=True, #cmin=cmin_s, cmax=cmax_s,
 			colorbar=dict(y=(ydom1[0]+ydom1[1])/2.0, yanchor="middle", len=ydom1[1]-ydom1[0])
 		),
 		coloraxis2=dict(
-			colorscale=CMAP[cmap], showscale=True, cmin=cmin_m, cmax=cmax_m,
+			colorscale=CMAP[cmap], showscale=True, #cmin=cmin_m, cmax=cmax_m,
 			colorbar=dict(y=(ydom2[0]+ydom2[1])/2.0, yanchor="middle", len=ydom2[1]-ydom2[0])
 		),
 		coloraxis3=dict(
-			colorscale=CMAP[cmap], showscale=True, cmin=cmin_r, cmax=cmax_r,
+			colorscale=CMAP[cmap], showscale=True, #cmin=cmin_r, cmax=cmax_r,
 			colorbar=dict(y=(ydom3[0]+ydom3[1])/2.0, yanchor="middle", len=ydom3[1]-ydom3[0])
 		),
 	)
