@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 """
-Module: extract_training_data.py
+Module: extract_data.py
 Package: NavierNet
 Author: @hconnorh
 Description:

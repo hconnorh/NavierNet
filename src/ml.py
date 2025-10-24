@@ -17,11 +17,12 @@ Package: NavierNet
 Author: @hconnorh
 Description:
 
-High-level training pipeline for a graph-based surrogate of fluid dynamics. It
-defines a compact message‑passing neural network to evolve nodal states on a
-mesh, utilities to load graph topology and time‑series fields and a training
-routine that learns per‑node state deltas while enforcing physics‑motivated
-regularisation (e.g., divergence and boundary consistency).
+High-level training pipeline for a graph-based Physics-Informed Neural Network 
+(PINN) trained on Navier-Stokes simulation results. It defines a compact 
+message‑passing neural network to evolve nodal states on a mesh, utilities to 
+load graph topology and time‑series fields and a training routine that learns 
+per‑node state deltas while enforcing physics‑motivated regularisation (e.g., 
+divergence and boundary consistency).
 
 Running this file trains the surrogate for a chosen simulation case with 
 configurable hyperparameters.
@@ -78,10 +79,10 @@ def calculate_residuals(df_sim, df_ml):
         'node_id': df_tmp['node_id'],
         'n_x': df_tmp['n_x_true'],
         'n_y': df_tmp['n_y_true'],
-        'p': ((df_tmp['p_pred'] - df_tmp['p_true'])/df_tmp['p_true']).abs(),
-        'u': ((df_tmp['u_pred'] - df_tmp['u_true'])/df_tmp['u_true']).abs(),
-        'v': ((df_tmp['v_pred'] - df_tmp['v_true'])/df_tmp['v_true']).abs(),
-        'vn': ((df_tmp['vn_pred'] - df_tmp['vn_true'])/df_tmp['vn_true']).abs(),
+        'p': (df_tmp['p_pred'] - df_tmp['p_true']).abs(),
+        'u': (df_tmp['u_pred'] - df_tmp['u_true']).abs(),
+        'v': (df_tmp['v_pred'] - df_tmp['v_true']).abs(),
+        'vn': (df_tmp['vn_pred'] - df_tmp['vn_true']).abs(),
         'step': df_tmp['step']
     })
 

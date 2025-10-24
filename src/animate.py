@@ -8,8 +8,9 @@ import re
 from pathlib import Path
 from tqdm import tqdm
 from PIL import Image
+from matplotlib.colors import LinearSegmentedColormap
 
-from plots import plot_compare
+from plots import plot_compare, CMAP
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -18,10 +19,33 @@ ROOT = Path(__file__).resolve().parent.parent
 Module: animate.py
 Package: NavierNet
 Author: @hconnorh
-
-Description: Provides utility functions for turning png plots and vtu files 
-             into animations.
+Description: Utilities for generating animations of the simulation results.
 """
+
+
+ELECTRIC_COLORMAP_MPL = LinearSegmentedColormap.from_list(
+    "electric",
+    [
+        (0.0, (0.0/255.0, 0.0/255.0, 0.0/255.0)),  # black
+        (0.37695419864113106, (2.0/255.0, 16.0/255.0, 83.0/255.0)),
+        (0.559445018580004, (9.0/255.0, 59.0/255.0, 157.0/255.0)),
+        (0.7490160293761956, (22.0/255.0, 115.0/255.0, 221.0/255.0)),
+        (0.9068800985070032, (73.0/255.0, 174.0/255.0, 243.0/255.0)),
+        (1.0, (255.0/255.0, 255.0/255.0, 255.0/255.0)),  # white
+    ],
+    N=256,
+)
+ELECTRIC_COLORMAP_MPL_R = ELECTRIC_COLORMAP_MPL.reversed()
+
+MPL_CMAP_MAP = {
+    "electric": ELECTRIC_COLORMAP_MPL,
+    "electric_r": ELECTRIC_COLORMAP_MPL_R,
+    "turbo": "turbo",
+    "viridis": "viridis",
+    # Grayscale with low=white, high=black
+    "greys": "Greys",
+    "gray_r": "gray_r",
+}
 
 
 def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis", 
@@ -48,7 +72,6 @@ def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis",
     scalar_name = "Velocity" # Vector field to plot Euclidean norm of
     output_mp4 = anim_dir.parent / f"sim-results-{sim_name}-{case_name}.mp4"
 
-
     # Load all VTU files
     vtu_files = sorted(glob.glob(os.path.join(vtu_dir, "inc-cylinder_*.vtu")))
     if not vtu_files:
@@ -74,6 +97,9 @@ def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis",
 
     # Prepare plotter
     plotter = pv.Plotter(off_screen=off_screen, window_size=window_size)
+    # Use a clean background and ensure the render area fills the window
+    plotter.set_background('white')
+    mpl_cmap = MPL_CMAP_MAP.get(cmap, cmap)
     
     # Render each timestep
     frames = []
@@ -82,14 +108,34 @@ def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis",
         # Add mesh with scalar coloring
         plotter.add_mesh(
             grid,
-            scalars=scalar_name,
-            cmap=cmap,
+            scalars="Velocity_mag",  # color by computed magnitude
+            cmap=mpl_cmap,
             show_edges=False,
             clim=(global_min, global_max),
+            show_scalar_bar=True,
+            scalar_bar_args=dict(
+                title="",
+                vertical=True,
+                position_x=0.77,  
+                position_y=0.315,
+                height=0.36,      
+                width=0.05,
+                label_font_size=14,      # Make colorbar tick/value labels smaller
+                title_font_size=14,
+                n_labels=5,             # Fewer labels for clarity (optional)
+            ),
         )
         
-        # Optional: adjust camera (example: top view)
-        plotter.camera_position = 'xy'
+        # Orient and fit camera so content fills the window and zoom in
+        plotter.view_xy()
+        plotter.enable_parallel_projection()
+        plotter.reset_camera()
+
+        # Leave a small right margin for the colorbar
+        try:
+            plotter.renderer.SetViewport(0.0, 0.0, 1.0, 1.0)
+        except Exception:
+            pass
         
         # Render offscreen and save as image
         img_path = anim_dir / f"frame_{i:04d}.png"
@@ -220,7 +266,8 @@ def png_to_mp4(img_dir, output_mp4, fps=20, window_size=(1920, 1080)):
 
 def animate_residuals(df_sim, df_ml, df_res, sim_name: str, 
                       dir_name: str = 'residuals', fps: int = 20, 
-                      window_size: tuple[int, int] = (1920, 1080)):
+                      window_size: tuple[int, int] = (900, 1260), 
+                      plot_type: str = "contour"):
 
     img_dir = ROOT / "sims" / sim_name / "animations" / f"{dir_name}"
     img_dir.mkdir(parents=True, exist_ok=True)
@@ -229,7 +276,8 @@ def animate_residuals(df_sim, df_ml, df_res, sim_name: str,
     step = df_sim['step'].max()
     start_step = 1
     for s in tqdm(range(start_step, step)):
-        fig = plot_compare(df_sim, df_ml, df_res, metric="p", step=s)
+        fig = plot_compare(df_sim, df_ml, df_res, metric="p", step=s,
+                                                  plot_type=plot_type)
         # fig.write_html(f"compare_{s}.html")
         fig.write_image(f"{img_dir}/compare_step{s}.png")
     
