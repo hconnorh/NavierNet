@@ -12,7 +12,7 @@ The objective of this project is to provide an end-to-end pipeline for building 
 
 The pipeline extracts simulation results (such as velocity and pressure at mesh nodes) and processes them into a graph format containing node features, edge relationships and time series state data. The model is then trained to predict future fluid states from current ones, while enforcing the model to obey to physical laws like incompressibity and boundry conditions. 
 
-With the current architecture, I have been able to train the model to accurately predict the next state from the previous state with (dp, du, dv) consistently below 0.2% per step. This performance is measured in a "teacher-forced" regime, where ground-truth data is always fed in at each step and the model only predicts a single future state at a time. However, limitations to the current approach have been observed when using a bootstrapped setup — where each prediction is used as input for the next timestep - errors accumulate, eventually causing the model to become unstable due to a lack of self-correction. This suggests new approaches may need to be considered.
+With the current architecture, I have been able to train the model to accurately predict the next state from the previous state with (dp, du, dv) consistently below 0.5% per step. This performance is measured in a "teacher-forced" regime, where ground-truth data is always fed in at each step and the model only predicts a single future state at a time. However, limitations to the current approach have been observed when using a bootstrapped setup — where each prediction is used as input for the next timestep - errors accumulate, eventually causing the model to become unstable due to a lack of self-correction. This suggests new approaches may need to be considered.
 
 ## Quickstart
 
@@ -100,7 +100,19 @@ The surrogate is a compact, two-layer GraphSAGE-style GNN defined in `src/ml.py`
 
 The model consists of two GraphSAGE layers that perform mean aggregation over neighbours, each followed by ReLU and a linear head that outputs three per-node deltas (du, dv, dp). Predictions are applied residually to form the next state, and training minimises MSE on deltas while adding physics-informed regularisation: an approximate graph divergence penalty computed from (dx, dy, dist) to encourage incompressibility, plus a boundary-weighted next-state error to respect boundary conditions.
 
+## Example Results 
 
+The following animation demonstrates the teacher‑forced evaluation where the model iteratively predicts the next state of each node using ground‑truth (simulated) values as input at each step. 
+
+![Teacher-forces Simulation](assets/next-step-residuals.gif)
+
+The simulation and ML contours match closely, capturing the main cylinder wake, shear layers and vortex shedding with similar amplitudes and gradients. Most errors occur in highly unsteady regions — near the cylinder, within the shear layers and vortex cores — where predictions are slightly smoother and sometimes phase-shifted. Residuals are generally localised and small downstream, showing the model effectively reproduces the large-scale flow, though accuracy drops in high-curvature, high-gradient areas.
+
+In "bootstrapped" mode, the model predicts each step using its own previous outputs, without ground-truth corrections. Currently, errors accumulate rapidly in this mode, leading to collapse and failure to capture realistic flow — highlighting the need for better normalisation and further fine tuning.
+
+For a more in-depth analysis have a peak at:
+- `notebooks/traing.py`
+- `notebooks/analysis.py`
 
 ## Troubleshooting
 
@@ -119,7 +131,7 @@ Other issues:
 
 - Model currently doesn't obey boundary conditions under bootstrapped conditions.
 - Accelerate iteration speed by parallelising: (1) PyFR case sweeps across parameter grids, (2) graph building and time‑series extraction per case/timestep, and (3) training and rollout evaluation across hyperparameter sets and seeds.
-- Broaden input data coverage to force generalisation: additional Reynolds numbers, timesteps and boundary conditions
+- Broaden input data coverage to force generalisation: additional Reynolds numbers, timesteps and boundary conditions.
 - Hyperparameter sweeps and ablations (hidden sizes, neighbours aggregation, loss weights).
 - Improved physics constraints (e.g., pressure Poisson consistency, stabilisation terms).
 - Cross‑case generalisation tests and zero‑shot evaluation. Run simulations on different mesh geometries.
@@ -135,3 +147,5 @@ Contributions are welcome! Please:
 If you have suggestions or notice any major gaps, please reach out. This project is a learning exercise and all feedback is appreciated.
 
 ## MIT Licence.
+
+This project is licensed under the MIT License. See [LICENCE.md](LICENCE.md) for details.
