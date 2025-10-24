@@ -79,10 +79,10 @@ def calculate_residuals(df_sim, df_ml):
         'node_id': df_tmp['node_id'],
         'n_x': df_tmp['n_x_true'],
         'n_y': df_tmp['n_y_true'],
-        'p': ((df_tmp['p_pred'] - df_tmp['p_true'])/df_tmp['p_true']).abs(),
-        'u': ((df_tmp['u_pred'] - df_tmp['u_true'])/df_tmp['u_true']).abs(),
-        'v': ((df_tmp['v_pred'] - df_tmp['v_true'])/df_tmp['v_true']).abs(),
-        'vn': ((df_tmp['vn_pred'] - df_tmp['vn_true'])/df_tmp['vn_true']).abs(),
+        'p': (df_tmp['p_pred'] - df_tmp['p_true']).abs(),
+        'u': (df_tmp['u_pred'] - df_tmp['u_true']).abs(),
+        'v': (df_tmp['v_pred'] - df_tmp['v_true']).abs(),
+        'vn': (df_tmp['vn_pred'] - df_tmp['vn_true']).abs(),
         'step': df_tmp['step']
     })
 
