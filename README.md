@@ -1,25 +1,18 @@
 # NavierNet
 
-A ML playground to train neural nets for 2D fluid dynamics!
+A PyTorch playground to train neural nets for 2D fluid dynamics!
 
 ![Cylinder Wake Simulation](assets/navier-stokes-2d-sim.gif)
 
 ## Overview
 
-**Note:** this project is a work in progress.
-
-The objective of this project is to provide an end-to-end pipeline for building machine learning surrogate models, trained on 2D incompressible computational fluid dynamics (CFD) simulations. Traditional CFD requires solving the high-dimensional Navier-Stokes equations, making simulations computationally demanding and slow. By leveraging graph neural networks, this project aims to accelerate CFD workflows while retaining physical fidelity...ideally!
-
-The pipeline extracts simulation results (such as velocity and pressure at mesh nodes) and processes them into a graph format containing node features, edge relationships and time series state data. The model is then trained to predict future fluid states from current ones, while enforcing the model to obey to physical laws like incompressibity and boundry conditions. 
-
-With the current architecture, I have been able to train the model to accurately predict the next state from the previous state with (dp, du, dv) consistently below 0.5% per step. This performance is measured in a "teacher-forced" regime, where ground-truth data is always fed in at each step and the model only predicts a single future state at a time. However, limitations to the current approach have been observed when using a bootstrapped setup — where each prediction is used as input for the next timestep - errors accumulate, eventually causing the model to become unstable due to a lack of self-correction. This suggests new approaches may need to be considered.
+NavierNet is a PyTorch-based playground for training graph neural networks (GNNs) to model 2D incompressible flow. NavierNet processes node‐wise CFD simulation data as a graph and trains a physics‐informed GNN to predict future fluid states. It accelerates CFD by learning the flow dynamics (velocity/pressure) on each mesh node from previous timesteps, enforcing incompressibility and boundary conditions in the loss.
 
 ## Quickstart
 
 Prerequisites (macOS):
 - Python ≥ 3.13
 - Homebrew
-- ffmpeg (for animations)
 
 Install UV (if you don't have it): see the UV docs at [UV](https://docs.astral.sh/uv/).
 
@@ -52,7 +45,7 @@ brew install libxsmm
 brew install ffmpeg
 ```
 
-### Run Pipeline
+### Run the Pipeline
 
 The workflow is organised as three notebooks under `notebooks/`. Run them in order:
 
@@ -69,7 +62,7 @@ Tips:
 
 ## Outputs & Artefacts
 
-All outputs for each run are stored within the "sims" directory. Here is a sample directory structure under `sims/<sim_name>/`:
+The `sims` directory stores all simulation, training  and evaluation artifacts for each experiment. Below is a sample directory structure:
 
 ```
 sims/<sim_name>/
@@ -88,39 +81,48 @@ sims/<sim_name>/
     animations/                   # optional MP4s from analysis
 ```
 
-## Training Data
+## Training
 
 The training data for this project is generated with [PyFR](https://www.pyfr.org), an open‑source computational fluid dynamics (CFD) solver. The focus is on the cylinder wake benchmark ([original paper](https://authors.library.caltech.edu/records/m8vtc-33e74?utm_source)), which captures the complex fluid flow that develops when a fluid moves past a cylinder, thus leading to boundary layer separation, vortex shedding and the formation of an unsteady wake. The cylinder wake problem is a classic but sufficiently complex problem for our models to tackle.
 
-Simulations are conducted across a range of fluid properties and boundary conditions to create diverse scenarios. For each timestep, we extract node-level quantities (e.g., velocity, pressure) from the unstructured mesh and process the results into a dataset suitable for machine learning. The primary objective is to train a physics-informed graph-based surrogate model (wow what a mouthful) to predict the future fluid state at all mesh nodes, using the current state information of each node and its neighbours in the graph.
+Simulations are conducted across a range of fluid properties and boundary conditions to create diverse scenarios. At each timestep, we extract node-level features (velocity, pressure, static geometry plus a flag for boundary nodes) on the 2D unstructured mesh. We build an undirected graph where
+nodes are mesh points and edges connect adjacent nodes (with attributes dx, dy and distance).
+
 
 ## Architecture
 
-The surrogate is a compact, two-layer GraphSAGE-style GNN defined in `src/ml.py` and fed by graph artefacts produced in `src/graph_network.py`. Each mesh node becomes a "graph" node; undirected edges are extracted from the mesh defined in PyFR, with per-edge attributes (dx, dy, dist) along with flags to determine boundary nodes. At each timestep, node features concatenate the current flow state with static geometry/flags: [u, v, p, x, y, flag]. 
-
-The model consists of two GraphSAGE layers that perform mean aggregation over neighbours, each followed by ReLU and a linear head that outputs three per-node deltas (du, dv, dp). Predictions are applied residually to form the next state, and training minimises MSE on deltas while adding physics-informed regularisation: an approximate graph divergence penalty computed from (dx, dy, dist) to encourage incompressibility, plus a boundary-weighted next-state error to respect boundary conditions.
+The GNN is a compact two-layer GraphSAGE model (see `src/ml.py`): 
+- **Input**: Node features (u, v, p, x, y, flag) at time t.
+- **GraphSAGE layers**: Each layer aggregates neighbor information (mean pooling) and applies ReLU.
+- **Output head**: A linear layer per node predicting deltas (du, dv, dp) for the next timestep.
+- **Residual update**: Predictions are added to current state to form t+1 values.
+- **Loss function**: We use mean-squared error on the deltas, plus physics‐informed regularisation terms.
+For example, we penalise divergence (computed via edge dx, dy) to enforce incompressibility and add
+extra weight on boundary-node errors to respect boundary conditions.
 
 ## Example Results 
 
-The following animation demonstrates the teacher‑forced evaluation where the model iteratively predicts the next state of each node using ground‑truth (simulated) values as input at each step. 
+The following animation demonstrates the "teacher‑forced" evaluation where the model iteratively predicts the next state of each node using ground‑truth (simulated) values as input at each step. 
+
+After training, NavierNet can predict the next fluid state with high accuracy in a teacher-forced setup. The figure below compares model predictions to ground-truth simulation over time.
 
 ![Teacher-forces Simulation](assets/next-step-residuals.gif)
 
-The simulation and ML contours match closely, capturing the main cylinder wake, shear layers and vortex shedding with similar amplitudes and gradients. Most errors occur in highly unsteady regions — near the cylinder, within the shear layers and vortex cores — where predictions are slightly smoother and sometimes phase-shifted. Residuals are generally localised and small downstream, showing the model effectively reproduces the large-scale flow, though accuracy drops in high-curvature, high-gradient areas.
+The model captures the main cylinder wake, vortex shedding and shear layers with similar amplitude. Small phase shifts or smoothing occur near high gradients and immediately behind the cylinder, but downstream errors remain localised and small.
 
-In "bootstrapped" mode, the model predicts each step using its own previous outputs, without ground-truth corrections. Currently, errors accumulate rapidly in this mode, leading to collapse and failure to capture realistic flow — highlighting the need for better normalisation and further fine tuning.
+In practice, when using *bootstrapped* predictions (that is, when the model takes its own previous predictions as input for the next timestep) errors tend to accumulate over time. This causes the model collapses toward a trivial solution and is not yet reproducing the large‑scale flow structures, suggesting the need for better normalisation/target scaling and further fine‑tuning.
 
-For a more in-depth analysis have a peak at:
-- `notebooks/traing.py`
+For a more in-depth analysis have a peek at:
+- `notebooks/training.py`
 - `notebooks/analysis.py`
 
 ## Troubleshooting
 
-Simulations in PyFR may become unstable at high Reynolds numbers. Before running, verify your Reynolds number setting; a value in the range of 100–200 at dt 0.05 typically provides stable results. If simulations still fail you might have to play around with `assets/config/2d-cylinder.ini`, the likely culprate is:
-- Time step/CFL too high: Lower dt to 0.01 (or 0.005) and pseudo-dt to 0.001.
+Simulations in PyFR may become unstable at high Reynolds numbers. If simulations fail you might have to play around with `assets/config/2d-cylinder.ini`, the likely culprit is:
+- Time step/CFL too high: Lower **dt** to 0.01 (or 0.005) and **pseudo-dt** to 0.001.
 - Insufficient inner iterations: Raise pseudo-niters-min/max from 3 to 10–20 so dual-time steps converge.
 - Backend/precision: Single precision on Metal can be numerically fragile. Try backend=openmp, or set [backend] precision = double (if your backend supports it).
-- Order: If still unstable, test order = 2 to widen stability margin.
+- Order: If still unstable, test **order** = 2 to widen stability margin.
 
 Other issues:
 - If notebooks cannot find modules, ensure the venv is activated and the package was installed with `uv pip install -e .`.
@@ -128,6 +130,8 @@ Other issues:
 - PyTorch device on macOS: MPS (Apple Silicon) can speed up training; see the [PyTorch MPS notes](https://pytorch.org/docs/stable/notes/mps.html).
 
 ## Next Steps
+
+Ongoing work and future directions include:
 
 - Model currently doesn't obey boundary conditions under bootstrapped conditions.
 - Accelerate iteration speed by parallelising: (1) PyFR case sweeps across parameter grids, (2) graph building and time‑series extraction per case/timestep, and (3) training and rollout evaluation across hyperparameter sets and seeds.
@@ -146,6 +150,10 @@ Contributions are welcome! Please:
 
 If you have suggestions or notice any major gaps, please reach out. This project is a learning exercise and all feedback is appreciated.
 
-## MIT Licence.
+## Licence
 
 This project is licensed under the MIT License. See [LICENCE.md](LICENCE.md) for details.
+
+<br/>
+
+*Developed as a learning project combining CFD and graph-based machine learning.*
