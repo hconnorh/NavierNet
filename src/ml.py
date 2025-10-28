@@ -150,7 +150,7 @@ class GraphSAGELayer(torch.nn.Module):
                           out_features] for each node in the graph.
 
         Notes:
-            - number of nodees is set by the number of nodes in the input 
+            - number of nodes is set by the number of nodes in the input 
               layer, i.e. the number of nodes in the mesh.
             - the "edge_index" tensor essentially dictates how the nodes are
               connected within the graph, and thus how information "flows"
@@ -255,8 +255,8 @@ def _compute_graph_divergence(u: torch.Tensor, v: torch.Tensor,
     """
     Computes an approximate divergence per node on a graph, based on edge 
     differences. In the context of (fluid) velocity fields, a divergence value 
-    near zero indicates local incompressibility at each node, i.e., that the f
-    ield preserves volume locally.
+    near zero indicates local incompressibility at each node, i.e., that the 
+    field preserves volume locally.
 
     For each directed edge from node i to node j, characterised by spatial 
     displacement (dx, dy) and edge length dist, the function evaluates a flux 
@@ -347,7 +347,7 @@ def load_graph_data(sim_name: str, case_name: str) -> Dict[str, np.ndarray]:
     return data
 
 
-# === GNN TRAINGING ===
+# === GNN TRAINING ===
 
 def train_model(sim_name: str, case_name: str, epochs: int = 5, 
                 lr: float = 1e-3, hidden_features: int = 128, 

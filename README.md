@@ -18,7 +18,7 @@ Install UV (if you don't have it): see the UV docs at [UV](https://docs.astral.s
 
 ```bash
 # clone
-git clone https://github.com/<your-org-or-user>/naviernet.git
+git clone https://github.com/hconnorh/naviernet.git
 cd naviernet
 
 # create venv + install dependencies from pyproject.toml

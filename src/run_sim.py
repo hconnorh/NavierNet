@@ -165,7 +165,7 @@ class PyfrSimulation:
         shutil.copy(self.mesh_file, self.sim_config_dir)
         shutil.copy(self.pyfrm_file, self.sim_config_dir)
 
-        # Copy and Modify .ini file for all permuations
+        # Copy and Modify .ini file for all permutations
         case_params = []
         for perm, (nu, Uin, dt, tend, dt_out) in enumerate(perms):
             ini_path = self._modify_ini_file(nu, Uin, dt, tend, dt_out, perm)
@@ -252,10 +252,10 @@ if __name__ == "__main__":
     sim_name = "example-model4"
     perms = [
         [
-            0.01,     # [nu, m/s^2] Kintematic velocity 
-            2.0,       # [Uin, m/s]  Inlet velocity 
-            0.05,      # [dt, s]     Time step
-            60.0,      # [tend, s]   Simulation total time
+            0.01,       # [nu, m/s^2] Kinematic velocity 
+            2.0,        # [Uin, m/s]  Inlet velocity 
+            0.05,       # [dt, s]     Time step
+            60.0,       # [tend, s]   Simulation total time
             0.05,       # [dt-out, s] Save state # Sh
         ],
     ]

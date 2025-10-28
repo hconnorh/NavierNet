@@ -153,7 +153,7 @@ def vtu_to_mp4(sim_name, case_name, remove_images=True, fps=20, cmap="viridis",
             os.remove(img_path)
 
 def _natural_key(path: str):
-    """Sorts order of png's based on numerical naming convention"""
+    """Sorts order of PNGs based on numerical naming convention"""
     name = os.path.basename(path)
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", name)]
 

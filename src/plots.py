@@ -8,7 +8,7 @@ import plotly.express as px
 
 
 """
-Module: plot_static_results.py
+Module: plots.py
 Package: NavierNet
 Author: @hconnorh
 Description: 
