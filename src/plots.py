@@ -368,7 +368,7 @@ def plot_penalty(df):
 
     # Set base layout
     fig = base_layout(
-        title='Incompressability Penalty',
+        title='Incompressibility Penalty',
         xlabel='epochs',
         ylabel='penalty [-]'
     )

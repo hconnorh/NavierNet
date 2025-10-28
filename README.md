@@ -62,7 +62,7 @@ Tips:
 
 ## Outputs & Artefacts
 
-The `sims` directory stores all simulation, training  and evaluation artifacts for each experiment. Below is a sample directory structure:
+The `sims` directory stores all simulation, training and evaluation artifacts for each experiment. Below is a sample directory structure:
 
 ```
 sims/<sim_name>/
@@ -106,15 +106,15 @@ The following animation demonstrates the "teacher‑forced" evaluation where the
 
 After training, NavierNet can predict the next fluid state with high accuracy in a teacher-forced setup. The figure below compares model predictions to ground-truth simulation over time.
 
-![Teacher-forces Simulation](assets/next-step-residuals.gif)
+![Teacher-forced Simulation](assets/next-step-residuals.gif)
 
 The model captures the main cylinder wake, vortex shedding and shear layers with similar amplitude. Small phase shifts or smoothing occur near high gradients and immediately behind the cylinder, but downstream errors remain localised and small.
 
-In practice, when using *bootstrapped* predictions (that is, when the model takes its own previous predictions as input for the next timestep) errors tend to accumulate over time. This causes the model collapses toward a trivial solution and is not yet reproducing the large‑scale flow structures, suggesting the need for better normalisation/target scaling and further fine‑tuning.
+In practice, when using *bootstrapped* predictions (that is, when the model takes its own previous predictions as input for the next timestep) errors tend to accumulate over time. This causes the model to collapse toward a trivial solution and is not yet reproducing the large‑scale flow structures, suggesting the need for better normalisation/target scaling and further fine‑tuning.
 
 For a more in-depth analysis have a peek at:
-- `notebooks/training.py`
-- `notebooks/analysis.py`
+- `notebooks/training.ipynb`
+- `notebooks/analysis.ipynb`
 
 ## Troubleshooting
 
